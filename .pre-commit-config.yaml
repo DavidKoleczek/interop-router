@@ -1,0 +1,26 @@
+repos:
+  # uv lock file management
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.9.15
+    hooks:
+      - id: uv-lock
+
+  # Ruff linting and formatting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.8
+    hooks:
+      # Run the linter with --fix (must be before formatter)
+      - id: ruff-check
+        args: [--fix]
+      # Run the formatter
+      - id: ruff-format
+
+  # Type checking with ty
+  - repo: local
+    hooks:
+      - id: ty-check
+        name: ty type check
+        entry: uv run ty check --output-format concise --no-progress
+        language: system
+        types: [python]
+        pass_filenames: false
