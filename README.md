@@ -5,6 +5,12 @@
     <p align="center">Seamlessly call major LLMs and image generation models through a unified interface.
     </p>
 </p>
+<p align="center">
+    <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="uv"></a>
+    <a href="https://github.com/astral-sh/ty"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json" alt="ty"></a>
+    <a href="https://pypi.org/project/interop-router/"><img src="https://img.shields.io/pypi/v/interop-router" alt="PyPI"></a>
+    <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+</p>
 
 InteropRouter is designed to seamlessly interoperate between the most common AI providers at a high level of quality. 
 It uses the [OpenAI Responses API](https://platform.openai.com/docs/guides/migrate-to-responses) types as a common denominator for inputs and outputs, allowing you to switch between providers with minimal code changes.
