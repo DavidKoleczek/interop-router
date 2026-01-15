@@ -21,6 +21,7 @@ ProviderName: TypeAlias = Literal["openai", "gemini", "anthropic"]
 CreatedBy: TypeAlias = Literal["user"] | ProviderName
 
 SupportedModelOpenAI: TypeAlias = Literal[
+    "gpt-5.2-codex",
     "gpt-5.2",
     "gpt-5.2-2025-12-11",
     "gpt-5.2-chat-latest",
@@ -33,7 +34,6 @@ SupportedModelOpenAI: TypeAlias = Literal[
     "gpt-5.1",
     "gpt-5.1-2025-11-13",
     "gpt-5.1-codex",
-    "gpt-5.1-mini",
     "gpt-5.1-chat-latest",
     "gpt-5",
     "gpt-5-mini",
@@ -53,7 +53,6 @@ SupportedModelAnthropic: TypeAlias = Literal[
     "claude-opus-4-5-20251101",
     "claude-haiku-4-5-20251001",
     "claude-sonnet-4-5-20250929",
-    "claude-opus-4-1-20250805",
 ]
 
 SupportedModel: TypeAlias = SupportedModelOpenAI | SupportedModelGemini | SupportedModelAnthropic
