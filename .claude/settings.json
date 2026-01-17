@@ -13,7 +13,7 @@
           {
             "type": "command",
             "command": "uv run ruff check --fix && uv run ruff format && uv run ty check",
-            "timeout": 60
+            "timeout": 10
           }
         ]
       }
