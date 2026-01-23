@@ -8,6 +8,7 @@ from openai import AsyncOpenAI
 from openai._types import omit
 from openai.types.responses import (
     Response,
+    ResponseCompletedEvent,
     ResponseFunctionToolCallParam,
     ResponseFunctionWebSearch,
     ResponseIncludable,
@@ -53,7 +54,7 @@ class OpenAIProvider:
     ) -> RouterResponse:
         input_messages = OpenAIProvider._prepare_input_messages(input)
         try:
-            response: Response = await client.responses.create(
+            response_stream = await client.responses.create(
                 model=model,
                 input=input_messages,
                 include=include if include is not None else omit,
@@ -67,8 +68,15 @@ class OpenAIProvider:
                 tools=tools if tools is not None else omit,
                 truncation=truncation if truncation is not None else omit,
                 store=False,
-                stream=False,
+                stream=True,
             )
+            response: Response | None = None
+            async for event in response_stream:
+                if isinstance(event, ResponseCompletedEvent):
+                    response = event.response
+                    break
+            if response is None:
+                raise RuntimeError("Response stream ended without a completed response event.")
         except openai.BadRequestError as e:
             if e.code == "context_length_exceeded":
                 raise ContextLimitExceededError(str(e), provider="openai", cause=e) from e

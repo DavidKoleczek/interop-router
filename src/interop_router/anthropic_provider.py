@@ -90,12 +90,15 @@ class AnthropicProvider:
             max_output_tokens, temperature, reasoning, tool_choice, tools, system_instruction
         )
         try:
-            response = await client.messages.create(
+            async with client.messages.stream(
                 messages=anthropic_messages,
                 model=model,
                 extra_headers=extra_headers if extra_headers else None,
                 **config,
-            )
+            ) as stream:
+                async for _text in stream.text_stream:
+                    pass
+            response = await stream.get_final_message()
         except anthropic.BadRequestError as e:
             if "prompt is too long" in str(e):
                 raise ContextLimitExceededError(str(e), provider="anthropic", cause=e) from e

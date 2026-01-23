@@ -67,7 +67,7 @@ class GeminiProvider:
         )
 
         try:
-            response = client.models.generate_content(
+            response = await client.aio.models.generate_content(
                 model=effective_model,
                 contents=gemini_messages,
                 config=gemini_config,
@@ -354,6 +354,7 @@ class GeminiProvider:
             tool_config=tool_config,
             image_config=gemini_image_config,
             response_modalities=["TEXT", "IMAGE"] if image_gen_tool else None,
+            http_options=types.HttpOptions(timeout=3_600_000),
         )
         return config, effective_model
 
