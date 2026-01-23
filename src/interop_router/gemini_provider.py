@@ -58,6 +58,7 @@ class GeminiProvider:
             model=model,
             system_instruction=system_instruction,
             include=include,
+            max_output_tokens=max_output_tokens,
             reasoning=reasoning,
             temperature=temperature,
             tools=tools,
@@ -292,6 +293,7 @@ class GeminiProvider:
         model: SupportedModelGemini,
         system_instruction: str,
         include: list[ResponseIncludable] | None = None,
+        max_output_tokens: int | None = None,
         reasoning: Reasoning | None = None,
         temperature: float | None = None,
         tools: Iterable[ToolParam] | None = None,
@@ -346,6 +348,7 @@ class GeminiProvider:
         config = types.GenerateContentConfig(
             system_instruction=system_instruction or None,
             thinking_config=thinking_config,
+            max_output_tokens=max_output_tokens,
             temperature=temperature,
             tools=gemini_tools,
             tool_config=tool_config,

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "WebFetch",
-      "WebSearch"
+      "WebSearch",
+      "Bash(uv build:*)"
     ]
   },
   "hooks": {

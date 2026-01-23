@@ -162,6 +162,37 @@ async def test_reasoning(router: Router, provider: ProviderName, model: Supporte
 
 
 @pytest.mark.parametrize(("provider", "model"), PROVIDER_MODEL_PARAMS)
+async def test_xhigh_reasoning(router: Router, provider: ProviderName, model: SupportedModel):
+    """xhigh reasoning in OpenAI models should corresponding to the highest level of reasoning in the other models:
+    - Claude -> thinking_budget_tokens = 32_000
+    - Gemini -> thinkingLevel = high
+    """
+    client = get_client(provider)
+    router.register(provider, client)
+
+    messages = [
+        ChatMessage(message=EasyInputMessageParam(role="system", content="You are a thoughtful assistant.")),
+        ChatMessage(
+            message=EasyInputMessageParam(
+                role="user",
+                content="Can you please think deeply about the meaning of life? Come up with a nuanced response in one sentence.",
+            )
+        ),
+    ]
+
+    response = await router.create(
+        model=model,
+        input=messages,
+        reasoning={"effort": "xhigh", "summary": "auto"},
+        include=["reasoning.encrypted_content"],
+        max_output_tokens=64_000,
+        truncation="auto",
+    )
+
+    assert response is not None
+
+
+@pytest.mark.parametrize(("provider", "model"), PROVIDER_MODEL_PARAMS)
 async def test_image(router: Router, provider: ProviderName, model: SupportedModel):
     image_path = Path(__file__).parents[1] / "integration" / "data" / "landscape.png"
     image_bytes = image_path.read_bytes()

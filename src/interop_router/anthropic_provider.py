@@ -288,7 +288,8 @@ class AnthropicProvider:
                 case "high":
                     thinking_budget_tokens = 16_000
                 case "xhigh":
-                    thinking_budget_tokens = 64_000  # This is the maximum allowed
+                    # 64k is the maximum, but this does not leave room for output tokens
+                    thinking_budget_tokens = 32_000
 
             thinking_config_param = ThinkingConfigEnabledParam(budget_tokens=thinking_budget_tokens, type="enabled")
 
@@ -297,7 +298,7 @@ class AnthropicProvider:
 
         extra_headers: dict[str, str] | None = None
         if has_web_fetch:
-            extra_headers = {"anthropic-beta": "web-fetch-2025-09-10"}
+            extra_headers = {"anthropic-beta": "web-fetch-2025-09-10,interleaved-thinking-2025-05-14"}
 
         config = {
             "max_tokens": max_output_tokens,
