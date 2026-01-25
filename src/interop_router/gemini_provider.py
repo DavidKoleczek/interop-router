@@ -1,6 +1,7 @@
 import base64
 from collections.abc import Iterable
 import json
+import time
 from typing import Any, Literal
 import uuid
 
@@ -48,6 +49,7 @@ class GeminiProvider:
         tool_choice: response_create_params.ToolChoice | None = None,
         tools: Iterable[ToolParam] | None = None,
         truncation: Literal["auto", "disabled"] | None = None,
+        background: bool | None = None,
     ) -> RouterResponse:
         preprocessed_input, system_instruction = GeminiProvider._preprocess_input(input)
         gemini_messages = GeminiProvider._convert_input_messages(preprocessed_input)
@@ -66,6 +68,7 @@ class GeminiProvider:
             gemini_kwargs=gemini_kwargs,
         )
 
+        start_time = time.perf_counter()
         try:
             response = await client.aio.models.generate_content(
                 model=effective_model,
@@ -76,8 +79,10 @@ class GeminiProvider:
             if "input_token" in str(e).lower():
                 raise ContextLimitExceededError(str(e), provider="gemini", cause=e) from e
             raise
+        duration_seconds = time.perf_counter() - start_time
 
         interop_response = GeminiProvider._convert_response(response)
+        interop_response.duration_seconds = duration_seconds
         return interop_response
 
     @staticmethod

@@ -1,5 +1,7 @@
+import asyncio
 from collections.abc import Iterable
 import json
+import time
 from typing import Any, Literal, cast
 import uuid
 
@@ -51,36 +53,61 @@ class OpenAIProvider:
         tool_choice: response_create_params.ToolChoice | None = None,
         tools: Iterable[ToolParam] | None = None,
         truncation: Literal["auto", "disabled"] | None = None,
+        background: bool | None = None,
     ) -> RouterResponse:
         input_messages = OpenAIProvider._prepare_input_messages(input)
+        start_time = time.perf_counter()
         try:
-            response_stream = await client.responses.create(
-                model=model,
-                input=input_messages,
-                include=include if include is not None else omit,
-                instructions=instructions if instructions is not None else omit,
-                max_output_tokens=max_output_tokens if max_output_tokens is not None else omit,
-                parallel_tool_calls=parallel_tool_calls if parallel_tool_calls is not None else omit,
-                reasoning=reasoning if reasoning is not None else omit,
-                temperature=temperature if temperature is not None else omit,
-                text=text if text is not None else omit,
-                tool_choice=tool_choice if tool_choice is not None else omit,
-                tools=tools if tools is not None else omit,
-                truncation=truncation if truncation is not None else omit,
-                store=False,
-                stream=True,
-            )
-            response: Response | None = None
-            async for event in response_stream:
-                if isinstance(event, ResponseCompletedEvent):
-                    response = event.response
-                    break
-            if response is None:
-                raise RuntimeError("Response stream ended without a completed response event.")
+            if background:
+                response = await client.responses.create(
+                    model=model,
+                    input=input_messages,
+                    include=include if include is not None else omit,
+                    instructions=instructions if instructions is not None else omit,
+                    max_output_tokens=max_output_tokens if max_output_tokens is not None else omit,
+                    parallel_tool_calls=parallel_tool_calls if parallel_tool_calls is not None else omit,
+                    reasoning=reasoning if reasoning is not None else omit,
+                    temperature=temperature if temperature is not None else omit,
+                    text=text if text is not None else omit,
+                    tool_choice=tool_choice if tool_choice is not None else omit,
+                    tools=tools if tools is not None else omit,
+                    truncation=truncation if truncation is not None else omit,
+                    store=True,
+                    stream=False,
+                    background=True,
+                )
+                while response.status in {"queued", "in_progress"}:
+                    await asyncio.sleep(2)
+                    response = await client.responses.retrieve(response.id)
+            else:
+                response_stream = await client.responses.create(
+                    model=model,
+                    input=input_messages,
+                    include=include if include is not None else omit,
+                    instructions=instructions if instructions is not None else omit,
+                    max_output_tokens=max_output_tokens if max_output_tokens is not None else omit,
+                    parallel_tool_calls=parallel_tool_calls if parallel_tool_calls is not None else omit,
+                    reasoning=reasoning if reasoning is not None else omit,
+                    temperature=temperature if temperature is not None else omit,
+                    text=text if text is not None else omit,
+                    tool_choice=tool_choice if tool_choice is not None else omit,
+                    tools=tools if tools is not None else omit,
+                    truncation=truncation if truncation is not None else omit,
+                    store=False,
+                    stream=True,
+                )
+                response: Response | None = None
+                async for event in response_stream:
+                    if isinstance(event, ResponseCompletedEvent):
+                        response = event.response
+                        break
+                if response is None:
+                    raise RuntimeError("Response stream ended without a completed response event.")
         except openai.BadRequestError as e:
             if e.code == "context_length_exceeded":
                 raise ContextLimitExceededError(str(e), provider="openai", cause=e) from e
             raise
+        duration_seconds = time.perf_counter() - start_time
 
         converted_output = OpenAIProvider._convert_to_chat_messages(response.output)
         if converted_output:
@@ -90,6 +117,7 @@ class OpenAIProvider:
             error=response.error,
             incomplete_details=response.incomplete_details,
             usage=response.usage,
+            duration_seconds=duration_seconds,
         )
 
     @staticmethod

@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 import json
+import time
 from typing import Any, Literal
 import uuid
 
@@ -83,12 +84,14 @@ class AnthropicProvider:
         tool_choice: response_create_params.ToolChoice | None = None,
         tools: Iterable[ToolParam] | None = None,
         truncation: Literal["auto", "disabled"] | None = None,
+        background: bool | None = None,
     ) -> RouterResponse:
         preprocessed_input, system_instruction = AnthropicProvider._preprocess_input(input)
         anthropic_messages = AnthropicProvider._convert_input_messages(preprocessed_input)
         config, extra_headers = AnthropicProvider._create_config(
             max_output_tokens, temperature, reasoning, tool_choice, tools, system_instruction
         )
+        start_time = time.perf_counter()
         try:
             async with client.messages.stream(
                 messages=anthropic_messages,
@@ -103,8 +106,10 @@ class AnthropicProvider:
             if "prompt is too long" in str(e):
                 raise ContextLimitExceededError(str(e), provider="anthropic", cause=e) from e
             raise
+        duration_seconds = time.perf_counter() - start_time
 
         interop_response = AnthropicProvider._convert_response(response)
+        interop_response.duration_seconds = duration_seconds
         return interop_response
 
     @staticmethod

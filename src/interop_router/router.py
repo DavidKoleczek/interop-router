@@ -55,6 +55,7 @@ class Router:
         tool_choice: response_create_params.ToolChoice | None = None,
         tools: Iterable[ToolParam] | None = None,
         truncation: Literal["auto", "disabled"] | None = None,
+        background: bool | None = None,
     ) -> RouterResponse:
         """Create a response using the appropriate provider for the given model.
 
@@ -71,6 +72,7 @@ class Router:
             tool_choice: Optional tool choice configuration.
             tools: Optional list of tools.
             truncation: Optional truncation setting.
+            background: Whether to run the model response in the background.
 
         Returns:
             The response from the provider.
@@ -96,6 +98,7 @@ class Router:
                 tool_choice=tool_choice,
                 tools=tools,
                 truncation=truncation,
+                background=background,
             )
 
         if model in get_args(SupportedModelGemini):

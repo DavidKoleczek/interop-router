@@ -142,6 +142,7 @@ class RouterResponse:
     error: ResponseError | None = None
     incomplete_details: IncompleteDetails | None = None
     usage: ResponseUsage | None = None
+    duration_seconds: float | None = None
 
 
 class InteropRouterError(Exception):
@@ -177,4 +178,5 @@ class ResponsesAPIProtocol(Protocol):
         tool_choice: response_create_params.ToolChoice | None = None,
         tools: Iterable[ToolParam] | None = None,
         truncation: Literal["auto", "disabled"] | None = None,
+        background: bool | None = None,
     ) -> RouterResponse: ...

@@ -193,7 +193,7 @@ async def test_xhigh_reasoning(router: Router, provider: ProviderName, model: Su
 
 
 @pytest.mark.parametrize(("provider", "model"), PROVIDER_MODEL_PARAMS)
-async def test_image(router: Router, provider: ProviderName, model: SupportedModel):
+async def test_image_understanding(router: Router, provider: ProviderName, model: SupportedModel):
     image_path = Path(__file__).parents[1] / "integration" / "data" / "landscape.png"
     image_bytes = image_path.read_bytes()
     base64_image = base64.b64encode(image_bytes).decode("utf-8")
@@ -567,6 +567,22 @@ async def test_context_limit_exceeded(
 
     with pytest.raises(ContextLimitExceededError):
         await router.create(input=messages, model=model)
+
+
+@pytest.mark.parametrize(("provider", "model"), PROVIDER_MODEL_PARAMS)
+async def test_background_mode(
+    router: Router,
+    provider: ProviderName,
+    model: SupportedModel,
+) -> None:
+    client = get_client(provider)
+    router.register(provider, client)
+
+    message = ChatMessage(
+        message=EasyInputMessageParam(role="user", content="What is 2 + 2? Reply with just the number.")
+    )
+    response = await router.create(input=[message], model=model, background=True)
+    assert response is not None
 
 
 async def test_azure_openai_client():
