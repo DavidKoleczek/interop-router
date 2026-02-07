@@ -34,6 +34,7 @@ SupportedModelOpenAI: TypeAlias = Literal[
     "gpt-5.1",
     "gpt-5.1-2025-11-13",
     "gpt-5.1-codex",
+    "gpt-5.1-mini",
     "gpt-5.1-chat-latest",
     "gpt-5",
     "gpt-5-mini",
@@ -50,8 +51,12 @@ SupportedModelGemini: TypeAlias = Literal[
 ]
 
 SupportedModelAnthropic: TypeAlias = Literal[
+    "claude-opus-4-6",
+    "claude-opus-4-5",
     "claude-opus-4-5-20251101",
+    "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5",
     "claude-sonnet-4-5-20250929",
 ]
 

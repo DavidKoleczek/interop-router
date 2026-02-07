@@ -3,7 +3,15 @@
     "allow": [
       "WebFetch",
       "WebSearch",
-      "Bash(uv build:*)"
+      "Bash(find:*)",
+      "Bash(git clone:*)",
+      "Bash(uv build:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv run ruff format:*)",
+      "Bash(uv run ruff check:*)",
+      "Bash(uv run ty:*)",
+      "Bash(gh release list:*)",
+      "Bash(gh release view:*)"
     ]
   },
   "hooks": {

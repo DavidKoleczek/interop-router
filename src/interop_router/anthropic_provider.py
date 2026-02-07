@@ -11,6 +11,7 @@ from anthropic.types import (
     ImageBlockParam,
     Message,
     MessageParam,
+    OutputConfigParam,
     RedactedThinkingBlock,
     RedactedThinkingBlockParam,
     ServerToolUseBlock,
@@ -19,6 +20,7 @@ from anthropic.types import (
     TextBlockParam,
     ThinkingBlock,
     ThinkingBlockParam,
+    ThinkingConfigAdaptiveParam,
     ThinkingConfigDisabledParam,
     ThinkingConfigEnabledParam,
     ToolChoiceAnyParam,
@@ -89,7 +91,7 @@ class AnthropicProvider:
         preprocessed_input, system_instruction = AnthropicProvider._preprocess_input(input)
         anthropic_messages = AnthropicProvider._convert_input_messages(preprocessed_input)
         config, extra_headers = AnthropicProvider._create_config(
-            max_output_tokens, temperature, reasoning, tool_choice, tools, system_instruction
+            model, max_output_tokens, temperature, reasoning, tool_choice, tools, system_instruction
         )
         start_time = time.perf_counter()
         try:
@@ -168,7 +170,7 @@ class AnthropicProvider:
                         message_params.append(MessageParam(role="assistant", content=content_items))
 
             elif input_message.get("type") == "reasoning":
-                summaries = input_message.get("summary", [])
+                summaries = list(input_message.get("summary", []))
                 if summaries:
                     summary = summaries[0]  # Claude should only have one summary
                     encrypted_content = input_message.get("encrypted_content", "") or ""
@@ -272,6 +274,7 @@ class AnthropicProvider:
 
     @staticmethod
     def _create_config(
+        model: SupportedModelAnthropic,
         max_output_tokens: int | None = None,
         temperature: float | None = None,
         reasoning: Reasoning | None = None,
@@ -279,36 +282,54 @@ class AnthropicProvider:
         tools: Iterable[ToolParam] | None = None,
         system_instruction: str = "",
     ) -> tuple[dict[str, Any], dict[str, str] | None]:
-        max_output_tokens = max_output_tokens if max_output_tokens is not None else 64000
+        is_adaptive = model in ("claude-opus-4-6",)
+
+        if max_output_tokens is None:
+            max_output_tokens = 128_000 if is_adaptive else 64_000
 
         thinking_config_param = ThinkingConfigDisabledParam(type="disabled")
-        thinking_budget_tokens = 0
-        if reasoning is not None:
-            reasoning_effort = reasoning.get("effort", "none")
-            thinking_budget_tokens = 1024
-            match reasoning_effort:
-                case "none":
-                    thinking_budget_tokens = 1024  # The minimum if thinking is enabled is 1024
-                case "low":
-                    thinking_budget_tokens = 2_000
-                case "medium":
-                    thinking_budget_tokens = 8_000
-                case "high":
-                    thinking_budget_tokens = 16_000
-                case "xhigh":
-                    # 64k is the maximum, but this does not leave room for output tokens
-                    thinking_budget_tokens = 32_000
+        output_config: OutputConfigParam | None = None
 
-            thinking_config_param = ThinkingConfigEnabledParam(budget_tokens=thinking_budget_tokens, type="enabled")
+        if reasoning is not None:
+            reasoning_effort = reasoning.get("effort") or "none"
+
+            if is_adaptive:
+                effort_map: dict[str, Literal["low", "medium", "high", "max"]] = {
+                    "low": "low",
+                    "medium": "medium",
+                    "high": "high",
+                    "xhigh": "max",
+                }
+                if reasoning_effort != "none":
+                    thinking_config_param = ThinkingConfigAdaptiveParam(type="adaptive")
+                    output_config = OutputConfigParam(effort=effort_map.get(reasoning_effort, "high"))
+            else:
+                thinking_budget_tokens = 1024
+                match reasoning_effort:
+                    case "none":
+                        thinking_budget_tokens = 1024  # The minimum if thinking is enabled is 1024
+                    case "low":
+                        thinking_budget_tokens = 2_000
+                    case "medium":
+                        thinking_budget_tokens = 8_000
+                    case "high":
+                        thinking_budget_tokens = 16_000
+                    case "xhigh":
+                        # 64k is the maximum, but this does not leave room for output tokens
+                        thinking_budget_tokens = 32_000
+                thinking_config_param = ThinkingConfigEnabledParam(budget_tokens=thinking_budget_tokens, type="enabled")
 
         anthropic_tools, has_web_fetch = AnthropicProvider._convert_tools(tools) if tools else ([], False)
         anthropic_tool_choice = AnthropicProvider._convert_tool_choice(tool_choice)
 
         extra_headers: dict[str, str] | None = None
         if has_web_fetch:
-            extra_headers = {"anthropic-beta": "web-fetch-2025-09-10,interleaved-thinking-2025-05-14"}
+            if is_adaptive:
+                extra_headers = {"anthropic-beta": "web-fetch-2025-09-10"}
+            else:
+                extra_headers = {"anthropic-beta": "web-fetch-2025-09-10,interleaved-thinking-2025-05-14"}
 
-        config = {
+        config: dict[str, Any] = {
             "max_tokens": max_output_tokens,
             "temperature": temperature if temperature is not None else NOT_GIVEN,
             "system": system_instruction if system_instruction else NOT_GIVEN,
@@ -317,6 +338,8 @@ class AnthropicProvider:
             "tool_choice": anthropic_tool_choice if anthropic_tool_choice is not None else NOT_GIVEN,
             "timeout": 3600,
         }
+        if output_config is not None:
+            config["output_config"] = output_config
         return config, extra_headers
 
     @staticmethod
