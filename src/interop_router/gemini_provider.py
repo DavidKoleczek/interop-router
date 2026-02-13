@@ -342,7 +342,7 @@ class GeminiProvider:
             (tool for tool in (tools or []) if tool.get("type") == "image_generation"),
             None,
         )
-        effective_model = image_gen_tool.get("model") if image_gen_tool else model
+        effective_model = image_gen_tool.get("model", model) if image_gen_tool else model
 
         gemini_tools: types.ToolListUnion | None = None
         tool_config: types.ToolConfig | None = None
