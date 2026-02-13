@@ -142,3 +142,71 @@ class Router:
             )
 
         raise ValueError(f"Unknown model: {model}")
+
+    async def count_tokens(
+        self,
+        *,
+        input: list[ChatMessage],
+        model: SupportedModel,
+        instructions: str | None = None,
+        reasoning: Reasoning | None = None,
+        tools: Iterable[ToolParam] | None = None,
+    ) -> int:
+        """Count input tokens for the given messages and configuration.
+
+        Uses the provider's native token counting endpoint.
+
+        Args:
+            input: List of chat messages.
+            model: The model to use for token counting.
+            instructions: Optional system instructions.
+            reasoning: Optional reasoning configuration.
+            tools: Optional list of tools.
+
+        Returns:
+            Token count estimate for the input.
+
+        Raises:
+            ValueError: If no client is registered for the required provider or if the
+                provider does not support token counting.
+        """
+        if model in get_args(SupportedModelOpenAI):
+            client = self._clients.get("openai")
+            if client is None:
+                raise ValueError("No client registered for provider: openai")
+            return await OpenAIProvider.count_tokens(
+                client=client,
+                input=input,
+                model=cast(SupportedModelOpenAI, model),
+                instructions=instructions,
+                reasoning=reasoning,
+                tools=tools,
+            )
+
+        if model in get_args(SupportedModelGemini):
+            client = self._clients.get("gemini")
+            if client is None:
+                raise ValueError("No client registered for provider: gemini")
+            return await GeminiProvider.count_tokens(
+                client=client,
+                input=input,
+                model=cast(SupportedModelGemini, model),
+                instructions=instructions,
+                reasoning=reasoning,
+                tools=tools,
+            )
+
+        if model in get_args(SupportedModelAnthropic):
+            client = self._clients.get("anthropic")
+            if client is None:
+                raise ValueError("No client registered for provider: anthropic")
+            return await AnthropicProvider.count_tokens(
+                client=client,
+                input=input,
+                model=cast(SupportedModelAnthropic, model),
+                instructions=instructions,
+                reasoning=reasoning,
+                tools=tools,
+            )
+
+        raise ValueError(f"Unknown model: {model}")

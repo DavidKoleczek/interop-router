@@ -53,6 +53,14 @@ response = await router.create(input=messages, model="gemini-3-flash-preview")
 response = await router.create(input=messages, model="claude-sonnet-4-5-20250929")
 ```
 
+Count input tokens before making a request using each provider's native token counting endpoint:
+
+```python
+token_count = await router.count_tokens(input=messages, model="gpt-5.2")
+token_count = await router.count_tokens(input=messages, model="gemini-3-flash-preview")
+token_count = await router.count_tokens(input=messages, model="claude-sonnet-4-5-20250929")
+```
+
 ### InteropRouter Design Philosophy
 
 The only goal of InteropRouter is to interoperate between the most common AI providers. To make this goal achievable, we make several trade-offs:

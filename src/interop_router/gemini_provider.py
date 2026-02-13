@@ -53,12 +53,13 @@ class GeminiProvider:
     ) -> RouterResponse:
         preprocessed_input, system_instruction = GeminiProvider._preprocess_input(input)
         gemini_messages = GeminiProvider._convert_input_messages(preprocessed_input)
+        combined_instructions = "\n".join(filter(None, [system_instruction, instructions]))
 
         # We can have kwargs specific to Gemini in the last message's provider_kwargs
         gemini_kwargs = input[-1].provider_kwargs.get("gemini", {}) if input else {}
         gemini_config, effective_model = GeminiProvider._create_config(
             model=model,
-            system_instruction=system_instruction,
+            system_instruction=combined_instructions,
             include=include,
             max_output_tokens=max_output_tokens,
             reasoning=reasoning,
@@ -84,6 +85,34 @@ class GeminiProvider:
         interop_response = GeminiProvider._convert_response(response)
         interop_response.duration_seconds = duration_seconds
         return interop_response
+
+    @staticmethod
+    async def count_tokens(
+        *,
+        client: genai.Client,
+        input: list[ChatMessage],
+        model: SupportedModelGemini,
+        instructions: str | None = None,
+        reasoning: Reasoning | None = None,
+        tools: Iterable[ToolParam] | None = None,
+    ) -> int:
+        preprocessed_input, system_instruction = GeminiProvider._preprocess_input(input)
+        gemini_messages = GeminiProvider._convert_input_messages(preprocessed_input)
+
+        # The Gemini Developer API count_tokens endpoint does not support system_instruction
+        # or tools in the config (only Vertex AI does). To get an accurate count, we prepend
+        # system instructions as a Content entry in the contents list.
+        combined_instructions = "\n".join(filter(None, [system_instruction, instructions]))
+        count_contents: list[Content] = []
+        if combined_instructions:
+            count_contents.append(Content(parts=[types.Part(text=combined_instructions)], role="user"))
+        count_contents.extend(gemini_messages)
+
+        result = await client.aio.models.count_tokens(
+            model=model,
+            contents=count_contents,
+        )
+        return result.total_tokens or 0
 
     @staticmethod
     def _preprocess_input(input: list[ChatMessage]) -> tuple[list[ChatMessage], str]:
@@ -313,7 +342,7 @@ class GeminiProvider:
             (tool for tool in (tools or []) if tool.get("type") == "image_generation"),
             None,
         )
-        effective_model = image_gen_tool.get("model") if image_gen_tool else model
+        effective_model = image_gen_tool.get("model", model) if image_gen_tool else model
 
         gemini_tools: types.ToolListUnion | None = None
         tool_config: types.ToolConfig | None = None

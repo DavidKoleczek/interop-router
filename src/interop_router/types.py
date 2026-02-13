@@ -185,3 +185,14 @@ class ResponsesAPIProtocol(Protocol):
         truncation: Literal["auto", "disabled"] | None = None,
         background: bool | None = None,
     ) -> RouterResponse: ...
+
+    async def count_tokens(
+        self,
+        *,
+        client: Any,
+        input: list[ChatMessage],
+        model: SupportedModel,
+        instructions: str | None = None,
+        reasoning: Reasoning | None = None,
+        tools: Iterable[ToolParam] | None = None,
+    ) -> int: ...
