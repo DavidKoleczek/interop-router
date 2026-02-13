@@ -121,6 +121,26 @@ class OpenAIProvider:
         )
 
     @staticmethod
+    async def count_tokens(
+        *,
+        client: AsyncOpenAI,
+        input: list[ChatMessage],
+        model: SupportedModelOpenAI,
+        instructions: str | None = None,
+        reasoning: Reasoning | None = None,
+        tools: Iterable[ToolParam] | None = None,
+    ) -> int:
+        input_messages = OpenAIProvider._prepare_input_messages(input)
+        response = await client.responses.input_tokens.count(
+            model=model,
+            input=input_messages,
+            instructions=instructions if instructions is not None else omit,
+            reasoning=reasoning if reasoning is not None else omit,
+            tools=tools if tools is not None else omit,
+        )
+        return response.input_tokens
+
+    @staticmethod
     def _prepare_input_messages(messages: list[ChatMessage]) -> list[ResponseInputItemParam]:
         """Filters out reasoning from other providers, expands Gemini web search
         metadata into function call pairs, and removes id/status fields.

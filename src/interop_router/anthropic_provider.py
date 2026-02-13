@@ -115,6 +115,34 @@ class AnthropicProvider:
         return interop_response
 
     @staticmethod
+    async def count_tokens(
+        *,
+        client: AsyncAnthropic,
+        input: list[ChatMessage],
+        model: SupportedModelAnthropic,
+        instructions: str | None = None,
+        reasoning: Reasoning | None = None,
+        tools: Iterable[ToolParam] | None = None,
+    ) -> int:
+        preprocessed_input, system_instruction = AnthropicProvider._preprocess_input(input)
+        anthropic_messages = AnthropicProvider._convert_input_messages(preprocessed_input)
+        config, extra_headers = AnthropicProvider._create_config(
+            model, reasoning=reasoning, tools=tools, system_instruction=system_instruction
+        )
+        count_kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": anthropic_messages,
+            "system": config["system"],
+            "thinking": config["thinking"],
+        }
+        if config["tools"]:
+            count_kwargs["tools"] = config["tools"]
+        if extra_headers:
+            count_kwargs["extra_headers"] = extra_headers
+        result = await client.messages.count_tokens(**count_kwargs)
+        return result.input_tokens
+
+    @staticmethod
     def _preprocess_input(input: list[ChatMessage]) -> tuple[list[ChatMessage], str]:
         preprocessed_messages = []
         instructions = ""
