@@ -193,6 +193,6 @@ class ResponsesAPIProtocol(Protocol):
         input: list[ChatMessage],
         model: SupportedModel,
         instructions: str | None = None,
-        reasoning: Reasoning | None = None,  # TODO: Is this necessary?
+        reasoning: Reasoning | None = None,
         tools: Iterable[ToolParam] | None = None,
     ) -> int: ...
