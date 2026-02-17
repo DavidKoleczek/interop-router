@@ -7,7 +7,7 @@ from openai.types.responses import EasyInputMessageParam
 import pytest
 
 from interop_router.router import Router
-from interop_router.types import ChatMessage
+from interop_router.types import ChatMessage, SupportedModelAnthropic
 
 
 @pytest.fixture
@@ -19,20 +19,20 @@ def router() -> Router:
     return router
 
 
-# region: Claude Opus 4.6
+# region: Anthropic models
+
+ANTHROPIC_MODELS: list[SupportedModelAnthropic] = ["claude-opus-4-6", "claude-sonnet-4-6"]
 
 
-OPUS_4_6_MODEL = "claude-opus-4-6"
-
-
-async def test_opus_4_6_adaptive_thinking_medium(router: Router) -> None:
+@pytest.mark.parametrize("model", ANTHROPIC_MODELS)
+async def test_adaptive_thinking_medium(router: Router, model: SupportedModelAnthropic) -> None:
     """Adaptive thinking with medium effort."""
     messages = [
         ChatMessage(message=EasyInputMessageParam(role="user", content="What is 27 * 43? Think step by step.")),
     ]
 
     response = await router.create(
-        model=OPUS_4_6_MODEL,
+        model=model,
         input=messages,
         reasoning={"effort": "medium", "summary": "auto"},
         include=["reasoning.encrypted_content"],
@@ -42,7 +42,8 @@ async def test_opus_4_6_adaptive_thinking_medium(router: Router) -> None:
     assert response.output
 
 
-async def test_opus_4_6_adaptive_thinking_multi_turn(router: Router) -> None:
+@pytest.mark.parametrize("model", ANTHROPIC_MODELS)
+async def test_adaptive_thinking_multi_turn(router: Router, model: SupportedModelAnthropic) -> None:
     """Multi-turn conversation with adaptive thinking preserves thinking blocks."""
     messages = [
         ChatMessage(
@@ -54,7 +55,7 @@ async def test_opus_4_6_adaptive_thinking_multi_turn(router: Router) -> None:
     ]
 
     response = await router.create(
-        model=OPUS_4_6_MODEL,
+        model=model,
         input=messages,
         reasoning={"effort": "low", "summary": "auto"},
         include=["reasoning.encrypted_content"],
@@ -70,7 +71,7 @@ async def test_opus_4_6_adaptive_thinking_multi_turn(router: Router) -> None:
         )
     )
     response2 = await router.create(
-        model=OPUS_4_6_MODEL,
+        model=model,
         input=messages,
         reasoning={"effort": "xhigh", "summary": "auto"},
         include=["reasoning.encrypted_content"],
@@ -79,14 +80,15 @@ async def test_opus_4_6_adaptive_thinking_multi_turn(router: Router) -> None:
     assert response2.output
 
 
-async def test_opus_4_6_no_reasoning(router: Router) -> None:
-    """Opus 4.6 works without reasoning (thinking disabled)."""
+@pytest.mark.parametrize("model", ANTHROPIC_MODELS)
+async def test_no_reasoning(router: Router, model: SupportedModelAnthropic) -> None:
+    """Works without reasoning (thinking disabled)."""
     messages = [
         ChatMessage(message=EasyInputMessageParam(role="user", content="Say hello in one word.")),
     ]
 
     response = await router.create(
-        model=OPUS_4_6_MODEL,
+        model=model,
         input=messages,
     )
 
