@@ -11,7 +11,8 @@
       "Bash(uv run ruff check:*)",
       "Bash(uv run ty:*)",
       "Bash(gh release list:*)",
-      "Bash(gh release view:*)"
+      "Bash(gh release view:*)",
+      "Bash(echo:*)"
     ]
   },
   "hooks": {
