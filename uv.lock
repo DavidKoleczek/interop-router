@@ -660,7 +660,7 @@ wheels = [
 
 [[package]]
 name = "interop-router"
-version = "0.1.8"
+version = "0.1.9"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic", extra = ["aiohttp"] },

@@ -310,7 +310,7 @@ class AnthropicProvider:
         tools: Iterable[ToolParam] | None = None,
         system_instruction: str = "",
     ) -> tuple[dict[str, Any], dict[str, str] | None]:
-        is_adaptive = model in ("claude-opus-4-6",)
+        is_adaptive = model in ("claude-opus-4-6", "claude-sonnet-4-6")
 
         if max_output_tokens is None:
             max_output_tokens = 128_000 if is_adaptive else 64_000
@@ -352,10 +352,7 @@ class AnthropicProvider:
 
         extra_headers: dict[str, str] | None = None
         if has_web_fetch:
-            if is_adaptive:
-                extra_headers = {"anthropic-beta": "web-fetch-2025-09-10"}
-            else:
-                extra_headers = {"anthropic-beta": "web-fetch-2025-09-10,interleaved-thinking-2025-05-14"}
+            extra_headers = {"anthropic-beta": "web-fetch-2025-09-10"}
 
         config: dict[str, Any] = {
             "max_tokens": max_output_tokens,

@@ -49,7 +49,7 @@ async def test_adaptive_thinking_multi_turn(router: Router, model: SupportedMode
         ChatMessage(
             message=EasyInputMessageParam(
                 role="user",
-                content="What is the sum of the first 10 prime numbers? Just write the number.",
+                content="What is the sum of the first 10 prime numbers? Reason, but just write the number in the end.",
             )
         ),
     ]
@@ -67,7 +67,9 @@ async def test_adaptive_thinking_multi_turn(router: Router, model: SupportedMode
     messages.extend(response.output)
     messages.append(
         ChatMessage(
-            message=EasyInputMessageParam(role="user", content="Now double that result. Just write the number."),
+            message=EasyInputMessageParam(
+                role="user", content="Now double that result. Reason, but just write the number in the end."
+            ),
         )
     )
     response2 = await router.create(
