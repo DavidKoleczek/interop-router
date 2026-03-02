@@ -273,12 +273,20 @@ class AnthropicProvider:
                     # NOTE: The BetaWebFetchToolResultBlockParam is not yet in the main MessageParam union
                     message_params.append(MessageParam(role="assistant", content=[fetch_result_block]))  # type: ignore
                 else:
-                    output = str(input_message.get("output") or "")
-                    tool_result_block = ToolResultBlockParam(
-                        tool_use_id=call_id,
-                        content=output,
-                        type="tool_result",
-                    )
+                    raw_output = input_message.get("output") or ""
+                    if isinstance(raw_output, list):
+                        content_blocks = AnthropicProvider._convert_function_output_list(raw_output)
+                        tool_result_block = ToolResultBlockParam(
+                            tool_use_id=call_id,
+                            content=content_blocks,
+                            type="tool_result",
+                        )
+                    else:
+                        tool_result_block = ToolResultBlockParam(
+                            tool_use_id=call_id,
+                            content=str(raw_output),
+                            type="tool_result",
+                        )
                     message_params.append(MessageParam(role="user", content=[tool_result_block]))
 
         return message_params
@@ -299,6 +307,23 @@ class AnthropicProvider:
             # Regular URL
             source = URLImageSourceParam(type="url", url=image_url)
             return ImageBlockParam(type="image", source=source)
+
+    @staticmethod
+    def _convert_function_output_list(output_items: list[Any]) -> list[TextBlockParam | ImageBlockParam]:
+        """Convert a list of ResponseFunctionCallOutputItemParam dicts to Anthropic content blocks."""
+        content_blocks: list[TextBlockParam | ImageBlockParam] = []
+        for item in output_items:
+            if not isinstance(item, dict):
+                continue
+            item_type = item.get("type")
+            if item_type == "input_text":
+                text = item.get("text", "")
+                content_blocks.append(TextBlockParam(type="text", text=text))
+            elif item_type == "input_image":
+                image_block = AnthropicProvider._convert_input_image(item)
+                if image_block:
+                    content_blocks.append(image_block)
+        return content_blocks
 
     @staticmethod
     def _create_config(

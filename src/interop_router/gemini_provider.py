@@ -2,7 +2,7 @@ import base64
 from collections.abc import Iterable
 import json
 import time
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 import uuid
 
 from google import genai
@@ -32,6 +32,7 @@ from interop_router.types import ChatMessage, ContextLimitExceededError, RouterR
 class GeminiProvider:
     PROVIDER_NAME = "gemini"
     DUMMY_THOUGHT_SIGNATURE = b"skip_thought_signature_validator"
+    IMAGE_MODELS_WITH_THINKING_LEVELS: ClassVar[set[str]] = {"gemini-3.1-flash-image-preview"}
 
     @staticmethod
     async def create(
@@ -265,27 +266,41 @@ class GeminiProvider:
                 previous_was_function_call = False
                 fc_name = GeminiProvider._get_function_call_name_from_id(input, input_message.get("call_id", ""))
 
-                # Gemini expects the function output to be a dict.
                 raw_output = input_message.get("output", "{}")
-                try:
-                    if isinstance(raw_output, str):
-                        parsed = json.loads(raw_output)
-                        response_dict = parsed if isinstance(parsed, dict) else {"output": parsed}
-                    else:
-                        response_dict = {"output": raw_output}
-                except json.JSONDecodeError:
-                    response_dict = {"output": raw_output}
-
-                gemini_content.append(
-                    types.Content(
-                        parts=[
-                            types.Part.from_function_response(
-                                name=fc_name,
-                                response=response_dict,
-                            )
-                        ]
+                if isinstance(raw_output, list):
+                    response_dict, function_response_parts = GeminiProvider._convert_function_output_list(raw_output)
+                    gemini_content.append(
+                        types.Content(
+                            parts=[
+                                types.Part.from_function_response(
+                                    name=fc_name,
+                                    response=response_dict,
+                                    parts=function_response_parts if function_response_parts else None,
+                                )
+                            ]
+                        )
                     )
-                )
+                else:
+                    # Gemini expects the function output to be a dict.
+                    try:
+                        if isinstance(raw_output, str):
+                            parsed = json.loads(raw_output)
+                            response_dict = parsed if isinstance(parsed, dict) else {"output": parsed}
+                        else:
+                            response_dict = {"output": raw_output}
+                    except json.JSONDecodeError:
+                        response_dict = {"output": raw_output}
+
+                    gemini_content.append(
+                        types.Content(
+                            parts=[
+                                types.Part.from_function_response(
+                                    name=fc_name,
+                                    response=response_dict,
+                                )
+                            ]
+                        )
+                    )
 
         return gemini_content
 
@@ -317,6 +332,40 @@ class GeminiProvider:
             if input_message.get("type") == "function_call" and input_message.get("call_id") == call_id:
                 return input_message.get("name", "")
         return ""
+
+    @staticmethod
+    def _convert_function_output_list(
+        output_items: list[Any],
+    ) -> tuple[dict[str, Any], list[types.FunctionResponsePart]]:
+        """Convert a list of ResponseFunctionCallOutputItemParam dicts for Gemini.
+
+        Separates text items (into a response dict) from image items
+        (into FunctionResponsePart objects with inline data).
+        """
+        text_parts: list[str] = []
+        function_response_parts: list[types.FunctionResponsePart] = []
+
+        for item in output_items:
+            if not isinstance(item, dict):
+                continue
+            item_type = item.get("type")
+            if item_type == "input_text":
+                text_parts.append(item.get("text", ""))
+            elif item_type == "input_image":
+                image_url = item.get("image_url", "")
+                if image_url and image_url.startswith("data:"):
+                    header, base64_data = image_url.split(",", 1)
+                    mime_type = header.split(":")[1].split(";")[0]
+                    image_bytes = base64.b64decode(base64_data)
+                    function_response_parts.append(
+                        types.FunctionResponsePart.from_bytes(data=image_bytes, mime_type=mime_type)
+                    )
+
+        response_dict: dict[str, Any] = {}
+        if text_parts:
+            response_dict["output"] = "\n".join(text_parts)
+
+        return response_dict, function_response_parts
 
     # endregion
 
@@ -357,8 +406,8 @@ class GeminiProvider:
         if include and "reasoning.encrypted_content" in include:
             include_thoughts = True
 
-        # Image gen models do not support thinking levels.
-        if reasoning and not image_gen_tool:
+        # Only some image gen models support thinking levels.
+        if reasoning and (not image_gen_tool or effective_model in GeminiProvider.IMAGE_MODELS_WITH_THINKING_LEVELS):
             match reasoning.get("effort", None):
                 case "minimal":
                     thinking_level = types.ThinkingLevel.LOW

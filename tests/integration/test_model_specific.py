@@ -4,6 +4,7 @@ from anthropic import AsyncAnthropic
 from google import genai
 from openai import AsyncOpenAI
 from openai.types.responses import EasyInputMessageParam
+from openai.types.responses.tool_param import ImageGeneration
 import pytest
 
 from interop_router.router import Router
@@ -94,6 +95,39 @@ async def test_no_reasoning(router: Router, model: SupportedModelAnthropic) -> N
         input=messages,
     )
 
+    assert response is not None
+    assert response.output
+
+
+# endregion
+
+# region: Gemini models
+
+
+async def test_image_gen_with_thinking(router: Router) -> None:
+    """Image generation with thinking levels using gemini-3.1-flash-image-preview."""
+    messages = [
+        ChatMessage(
+            message=EasyInputMessageParam(
+                role="user",
+                content="Create a picture of a nano banana dish in a fancy restaurant with an interop theme?",
+            ),
+            provider_kwargs={"gemini": {"image_config": {"aspect_ratio": "4:3", "image_size": "1K"}}},
+        )
+    ]
+
+    image_tool = ImageGeneration(
+        type="image_generation",
+        model="gemini-3.1-flash-image-preview",
+    )
+
+    response = await router.create(
+        input=messages,
+        model="gemini-3-flash-preview",
+        tools=[image_tool],
+        reasoning={"effort": "medium", "summary": "auto"},
+        include=["reasoning.encrypted_content"],
+    )
     assert response is not None
     assert response.output
 

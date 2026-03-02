@@ -7,7 +7,12 @@ from pathlib import Path
 from anthropic import AsyncAnthropic
 from google import genai
 from openai import AsyncOpenAI
-from openai.types.responses import EasyInputMessageParam, ResponseInputImageParam, ResponseInputTextParam
+from openai.types.responses import (
+    EasyInputMessageParam,
+    ResponseInputImageContentParam,
+    ResponseInputImageParam,
+    ResponseInputTextParam,
+)
 from openai.types.responses.function_tool_param import FunctionToolParam
 from openai.types.responses.response_input_item_param import FunctionCallOutput, Message
 from openai.types.shared_params.reasoning import Reasoning
@@ -250,6 +255,84 @@ async def test_count_tokens_with_image(router: Router, provider: ProviderName, m
     assert response.usage.input_tokens == token_count, (
         f"Expected token count {token_count} to match actual input tokens {response.usage.input_tokens}"
     )
+
+
+@pytest.mark.parametrize(("provider", "model"), TOKEN_COUNT_PROVIDER_MODEL_PARAMS)
+async def test_count_tokens_with_image_in_tool_result(router: Router, provider: ProviderName, model: SupportedModel):
+    """Verify that count_tokens correctly accounts for images in function call outputs."""
+    client = get_client(provider)
+    router.register(provider, client)
+
+    image_path = Path(__file__).parents[1] / "integration" / "data" / "landscape.png"
+    image_bytes = image_path.read_bytes()
+    base64_image = base64.b64encode(image_bytes).decode("utf-8")
+    data_url = f"data:image/png;base64,{base64_image}"
+
+    messages = [
+        ChatMessage(message=EasyInputMessageParam(role="system", content="Describe images briefly.")),
+        ChatMessage(
+            message=EasyInputMessageParam(
+                role="user",
+                content="Use the read_image tool to read '/tmp/landscape.png'.",
+            )
+        ),
+        ChatMessage(
+            message={
+                "type": "function_call",
+                "call_id": "call_read_image_1",
+                "name": "read_image",
+                "arguments": '{"path": "/tmp/landscape.png"}',
+            },
+            created_by="openai",
+        ),
+        ChatMessage(
+            message=FunctionCallOutput(
+                call_id="call_read_image_1",
+                output=[ResponseInputImageContentParam(type="input_image", image_url=data_url, detail="auto")],
+                type="function_call_output",
+            ),
+        ),
+    ]
+
+    read_image_tool = FunctionToolParam(
+        type="function",
+        name="read_image",
+        description="Read an image file and return its contents.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Path to the image file."},
+            },
+            "required": ["path"],
+            "additionalProperties": False,
+        },
+        strict=True,
+    )
+
+    token_count = await router.count_tokens(
+        input=messages,
+        model=model,
+        tools=[read_image_tool],
+    )
+
+    response = await router.create(
+        input=messages,
+        model=model,
+        tools=[read_image_tool],
+        max_output_tokens=1024,
+    )
+
+    assert response.usage is not None
+    if provider == "gemini":
+        # Gemini Developer API countTokens does not support tool definitions in the request,
+        # so the count will be strictly less than the actual input tokens.
+        assert token_count < response.usage.input_tokens, (
+            f"Expected token count {token_count} to be less than actual input tokens {response.usage.input_tokens}"
+        )
+    else:
+        assert response.usage.input_tokens == token_count, (
+            f"Expected token count {token_count} to match actual input tokens {response.usage.input_tokens}"
+        )
 
 
 @pytest.mark.parametrize(("provider", "model"), TOKEN_COUNT_PROVIDER_MODEL_PARAMS)

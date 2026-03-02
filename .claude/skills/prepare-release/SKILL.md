@@ -21,7 +21,7 @@ Checks
 
 Draft release notes
 
-1. Look at the previous release logs at https://github.com/DavidKoleczek/interop-router/releases your draft release MUST follow the same style and structure.
+1. Look at the previous release logs at https://github.com/DavidKoleczek/interop-router/releases (use the gh CLI) your draft release MUST follow the same style and structure.
 2. Create a draft release description based on the recent code changes and place it in `ai_working/draft_release_{version}.md`. Here are some additional guidelines:
 
 - Don't list dependency updates individual. Just say "Updated dependencies".

@@ -9,6 +9,7 @@ from google import genai
 from openai import AsyncOpenAI
 from openai.types.responses import (
     EasyInputMessageParam,
+    ResponseInputImageContentParam,
     ResponseInputImageParam,
     ResponseInputTextParam,
     WebSearchToolParam,
@@ -20,6 +21,21 @@ import pytest
 
 from interop_router.router import Router
 from interop_router.types import ChatMessage, ContextLimitExceededError, ProviderName, SupportedModel
+
+READ_IMAGE_TOOL = FunctionToolParam(
+    type="function",
+    name="read_image",
+    description="Read an image file and return its contents.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "Path to the image file."},
+        },
+        "required": ["path"],
+        "additionalProperties": False,
+    },
+    strict=True,
+)
 
 PROVIDER_MODEL_PARAMS = [
     pytest.param("openai", "gpt-5.2"),
@@ -213,6 +229,55 @@ async def test_image_understanding(router: Router, provider: ProviderName, model
     )
     response = await router.create(input=[message], model=model)
     assert response is not None
+
+
+@pytest.mark.parametrize(("provider", "model"), PROVIDER_MODEL_PARAMS)
+async def test_image_in_tool_result(router: Router, provider: ProviderName, model: SupportedModel):
+    """Verify that images returned in function call outputs are properly handled."""
+    client = get_client(provider)
+    router.register(provider, client)
+
+    messages = [
+        ChatMessage(
+            message=EasyInputMessageParam(
+                role="user",
+                content="Use the read_image tool to read the image at '/tmp/landscape.png', then describe what you see.",
+            )
+        ),
+    ]
+
+    response = await router.create(
+        model=model,
+        input=messages,
+        tools=[READ_IMAGE_TOOL],
+        tool_choice="auto",
+    )
+    assert response is not None
+
+    messages.extend(response.output)
+    for chat_message in response.output:
+        msg = chat_message.message
+        if msg.get("type") == "function_call" and msg.get("name") == "read_image":
+            call_id = msg.get("call_id", "")
+
+            image_path = Path(__file__).parents[1] / "integration" / "data" / "landscape.png"
+            image_bytes = image_path.read_bytes()
+            base64_image = base64.b64encode(image_bytes).decode("utf-8")
+            data_url = f"data:image/png;base64,{base64_image}"
+
+            messages.append(
+                ChatMessage(
+                    message=FunctionCallOutput(
+                        call_id=call_id,
+                        output=[ResponseInputImageContentParam(type="input_image", image_url=data_url, detail="auto")],
+                        type="function_call_output",
+                    )
+                )
+            )
+
+            response2 = await router.create(model=model, input=messages, tools=[READ_IMAGE_TOOL], tool_choice="auto")
+            assert response2 is not None
+            break
 
 
 @pytest.mark.parametrize(("provider", "model"), PROVIDER_MODEL_PARAMS)

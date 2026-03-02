@@ -11,5 +11,6 @@ The process to go through is:
 2. For each dependency, go to its PyPI JSON site. For example, for the openai package that is: https://pypi.org/pypi/openai/json Get the latest release version.
 3. Now bump the dependency in pyproject.toml. For example, if the current version in the pyproject.toml is `>=1.05,<2.0`, but on Pypi the latest version is 1.11, change the dependency to `>=1.11,<2.0`
 4. If you notice a major version upgrade (ex v2 to v3), let the user know of each of those cases, but do not make the change yourself.
-5. Make sure all the checks still pass by running `uv run ruff format && uv run ruff check --fix && uv run ty check` from the root.
-6. Run `uv sync --all-extras --all-groups` to update the lock file.
+5. Also update the `rev` fields in `.pre-commit-config.yaml` to the latest versions of each hook (check PyPI for the corresponding packages). Run `prek run --all-files` to verify the hooks still pass.
+6. Make sure all the checks still pass by running `uv run ruff format && uv run ruff check --fix && uv run ty check` from the root.
+7. Run `uv sync --all-extras --all-groups` to update the lock file.
