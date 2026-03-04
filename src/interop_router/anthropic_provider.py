@@ -87,18 +87,18 @@ class AnthropicProvider:
         tools: Iterable[ToolParam] | None = None,
         truncation: Literal["auto", "disabled"] | None = None,
         background: bool | None = None,
+        provider_kwargs: dict[str, Any] | None = None,
     ) -> RouterResponse:
         preprocessed_input, system_instruction = AnthropicProvider._preprocess_input(input)
         anthropic_messages = AnthropicProvider._convert_input_messages(preprocessed_input)
-        config, extra_headers = AnthropicProvider._create_config(
-            model, max_output_tokens, temperature, reasoning, tool_choice, tools, system_instruction
+        config = AnthropicProvider._create_config(
+            model, max_output_tokens, temperature, reasoning, tool_choice, tools, system_instruction, provider_kwargs
         )
         start_time = time.perf_counter()
         try:
             async with client.messages.stream(
                 messages=anthropic_messages,
                 model=model,
-                extra_headers=extra_headers if extra_headers else None,
                 **config,
             ) as stream:
                 async for _text in stream.text_stream:
@@ -126,7 +126,7 @@ class AnthropicProvider:
     ) -> int:
         preprocessed_input, system_instruction = AnthropicProvider._preprocess_input(input)
         anthropic_messages = AnthropicProvider._convert_input_messages(preprocessed_input)
-        config, extra_headers = AnthropicProvider._create_config(
+        config = AnthropicProvider._create_config(
             model, reasoning=reasoning, tools=tools, system_instruction=system_instruction
         )
         count_kwargs: dict[str, Any] = {
@@ -137,8 +137,8 @@ class AnthropicProvider:
         }
         if config["tools"]:
             count_kwargs["tools"] = config["tools"]
-        if extra_headers:
-            count_kwargs["extra_headers"] = extra_headers
+        if "extra_headers" in config:
+            count_kwargs["extra_headers"] = config["extra_headers"]
         result = await client.messages.count_tokens(**count_kwargs)
         return result.input_tokens
 
@@ -334,7 +334,8 @@ class AnthropicProvider:
         tool_choice: response_create_params.ToolChoice | None = None,
         tools: Iterable[ToolParam] | None = None,
         system_instruction: str = "",
-    ) -> tuple[dict[str, Any], dict[str, str] | None]:
+        provider_kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         is_adaptive = model in ("claude-opus-4-6", "claude-sonnet-4-6")
 
         if max_output_tokens is None:
@@ -375,10 +376,6 @@ class AnthropicProvider:
         anthropic_tools, has_web_fetch = AnthropicProvider._convert_tools(tools) if tools else ([], False)
         anthropic_tool_choice = AnthropicProvider._convert_tool_choice(tool_choice)
 
-        extra_headers: dict[str, str] | None = None
-        if has_web_fetch:
-            extra_headers = {"anthropic-beta": "web-fetch-2025-09-10"}
-
         config: dict[str, Any] = {
             "max_tokens": max_output_tokens,
             "temperature": temperature if temperature is not None else NOT_GIVEN,
@@ -390,7 +387,11 @@ class AnthropicProvider:
         }
         if output_config is not None:
             config["output_config"] = output_config
-        return config, extra_headers
+        if has_web_fetch:
+            config["extra_headers"] = {"anthropic-beta": "web-fetch-2025-09-10"}
+        if provider_kwargs and "cache_control" in provider_kwargs:
+            config["cache_control"] = provider_kwargs["cache_control"]
+        return config
 
     @staticmethod
     def _convert_tools(
@@ -602,12 +603,15 @@ class AnthropicProvider:
 
     @staticmethod
     def _convert_usage(usage: Usage) -> ResponseUsage:
-        input_tokens = usage.input_tokens
+        # With caching enabled, Anthropic's input_tokens only counts tokens after the last cache breakpoint.
+        # Sum all three fields to match OpenAI's total input_tokens.
+        cache_read = usage.cache_read_input_tokens or 0
+        cache_creation = usage.cache_creation_input_tokens or 0
+        input_tokens = usage.input_tokens + cache_read + cache_creation
         output_tokens = usage.output_tokens
         total_tokens = input_tokens + output_tokens
-        cached_tokens = usage.cache_read_input_tokens or 0
 
-        input_tokens_details = InputTokensDetails(cached_tokens=cached_tokens)
+        input_tokens_details = InputTokensDetails(cached_tokens=cache_read)
         output_tokens_details = OutputTokensDetails(reasoning_tokens=0)
 
         return ResponseUsage(

@@ -484,6 +484,28 @@ async def test_web_search(router: Router, provider: ProviderName, model: Support
 
 
 @pytest.mark.parametrize(("provider", "model"), PROVIDER_MODEL_PARAMS)
+async def test_web_fetch(router: Router, provider: ProviderName, model: SupportedModel):
+    client = get_client(provider)
+    router.register(provider, client)
+
+    messages = [
+        ChatMessage(
+            message=EasyInputMessageParam(
+                role="user",
+                content="Go to https://example.com and tell me what the page title is.",
+            )
+        )
+    ]
+    response = await router.create(
+        input=messages,
+        model=model,
+        tools=[WebSearchToolParam(type="web_search")],
+    )
+    assert response is not None
+    assert response.output
+
+
+@pytest.mark.parametrize(("provider", "model"), PROVIDER_MODEL_PARAMS)
 async def test_image_gen_basic(router: Router, provider: ProviderName, model: SupportedModel):
     client = get_client(provider)
     router.register(provider, client)

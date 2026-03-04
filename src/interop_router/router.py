@@ -56,6 +56,7 @@ class Router:
         tools: Iterable[ToolParam] | None = None,
         truncation: Literal["auto", "disabled"] | None = None,
         background: bool | None = None,
+        provider_kwargs: dict[str, Any] | None = None,
     ) -> RouterResponse:
         """Create a response using the appropriate provider for the given model.
 
@@ -73,6 +74,8 @@ class Router:
             tools: Optional list of tools.
             truncation: Optional truncation setting.
             background: Whether to run the model response in the background.
+            provider_kwargs: Optional provider-specific keyword arguments.
+              See the PROVIDER_GUIDE.md for details.
 
         Returns:
             The response from the provider.
@@ -139,6 +142,7 @@ class Router:
                 tool_choice=tool_choice,
                 tools=tools,
                 truncation=truncation,
+                provider_kwargs=provider_kwargs,
             )
 
         raise ValueError(f"Unknown model: {model}")

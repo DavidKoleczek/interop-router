@@ -99,6 +99,35 @@ async def test_no_reasoning(router: Router, model: SupportedModelAnthropic) -> N
     assert response.output
 
 
+async def test_prompt_caching(router: Router) -> None:
+    """Automatic prompt caching via provider_kwargs produces cache read tokens on the second turn."""
+    cache_control = {"cache_control": {"type": "ephemeral"}}
+    model: SupportedModelAnthropic = "claude-sonnet-4-6"
+
+    # Minimum cacheable length for Sonnet 4.6 is 2048 tokens; use a long system prompt to exceed it.
+    padding = "word " * 2200
+    messages = [
+        ChatMessage(
+            message=EasyInputMessageParam(role="system", content=f"You are a helpful assistant. Context: {padding}")
+        ),
+        ChatMessage(message=EasyInputMessageParam(role="user", content="Say hello in one word.")),
+    ]
+
+    response1 = await router.create(model=model, input=messages, provider_kwargs=cache_control)
+    assert response1.output
+
+    messages.extend(response1.output)
+    messages.append(
+        ChatMessage(message=EasyInputMessageParam(role="user", content="Now say goodbye in one word.")),
+    )
+
+    response2 = await router.create(model=model, input=messages, provider_kwargs=cache_control)
+    assert response2.output
+    assert response2.usage is not None
+    assert response2.usage.input_tokens_details is not None
+    assert response2.usage.input_tokens_details.cached_tokens > 0
+
+
 # endregion
 
 # region: Gemini models

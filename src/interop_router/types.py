@@ -47,6 +47,7 @@ SupportedModelOpenAI: TypeAlias = Literal[
 ]
 
 SupportedModelGemini: TypeAlias = Literal[
+    "gemini-3.1-flash-lite-preview",
     "gemini-3.1-pro-preview",
     "gemini-3.1-pro-preview-customtools",
     "gemini-3-flash-preview",
@@ -188,6 +189,7 @@ class ResponsesAPIProtocol(Protocol):
         tools: Iterable[ToolParam] | None = None,
         truncation: Literal["auto", "disabled"] | None = None,
         background: bool | None = None,
+        provider_kwargs: dict[str, Any] | None = None,
     ) -> RouterResponse: ...
 
     async def count_tokens(

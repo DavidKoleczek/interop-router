@@ -13,4 +13,4 @@ The process to go through is:
 4. If you notice a major version upgrade (ex v2 to v3), let the user know of each of those cases, but do not make the change yourself.
 5. Also update the `rev` fields in `.pre-commit-config.yaml` to the latest versions of each hook (check PyPI for the corresponding packages). Run `prek run --all-files` to verify the hooks still pass.
 6. Make sure all the checks still pass by running `uv run ruff format && uv run ruff check --fix && uv run ty check` from the root.
-7. Run `uv sync --all-extras --all-groups` to update the lock file.
+7. Run `uv sync -U --all-extras --all-groups` to update the lock file.
