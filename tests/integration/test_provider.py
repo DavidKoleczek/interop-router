@@ -3,6 +3,7 @@
 import base64
 import os
 from pathlib import Path
+from typing import Any, cast
 
 from anthropic import AsyncAnthropic
 from google import genai
@@ -26,21 +27,24 @@ READ_IMAGE_TOOL = FunctionToolParam(
     type="function",
     name="read_image",
     description="Read an image file and return its contents.",
-    parameters={
-        "type": "object",
-        "properties": {
-            "path": {"type": "string", "description": "Path to the image file."},
+    parameters=cast(
+        dict[str, object],
+        {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Path to the image file."},
+            },
+            "required": ["path"],
+            "additionalProperties": False,
         },
-        "required": ["path"],
-        "additionalProperties": False,
-    },
+    ),
     strict=True,
 )
 
 PROVIDER_MODEL_PARAMS = [
-    pytest.param("openai", "gpt-5.2"),
-    pytest.param("gemini", "gemini-3-flash-preview"),
-    pytest.param("anthropic", "claude-haiku-4-5-20251001"),
+    pytest.param("openai", "gpt-5.4"),
+    pytest.param("gemini", "gemini-3.1-flash-lite-preview"),
+    pytest.param("anthropic", "claude-sonnet-4-6"),
 ]
 
 
@@ -49,39 +53,45 @@ FUNCTION_TOOLS: list[FunctionToolParam] = [
         type="function",
         name="get_weather",
         description="Get the current weather for a given location.",
-        parameters={
-            "type": "object",
-            "properties": {
-                "location": {
-                    "type": "string",
-                    "description": "The city and country, e.g. San Francisco, USA",
+        parameters=cast(
+            dict[str, object],
+            {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "The city and country, e.g. San Francisco, USA",
+                    },
+                    "unit": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": "The temperature unit to use.",
+                    },
                 },
-                "unit": {
-                    "type": "string",
-                    "enum": ["celsius", "fahrenheit"],
-                    "description": "The temperature unit to use.",
-                },
+                "required": ["location", "unit"],
+                "additionalProperties": False,
             },
-            "required": ["location", "unit"],
-            "additionalProperties": False,
-        },
+        ),
         strict=True,
     ),
     FunctionToolParam(
         type="function",
         name="get_stock_price",
         description="Get the current stock price for a given ticker symbol.",
-        parameters={
-            "type": "object",
-            "properties": {
-                "ticker": {
-                    "type": "string",
-                    "description": "The stock ticker symbol, e.g. AAPL, GOOGL",
+        parameters=cast(
+            dict[str, object],
+            {
+                "type": "object",
+                "properties": {
+                    "ticker": {
+                        "type": "string",
+                        "description": "The stock ticker symbol, e.g. AAPL, GOOGL",
+                    },
                 },
+                "required": ["ticker"],
+                "additionalProperties": False,
             },
-            "required": ["ticker"],
-            "additionalProperties": False,
-        },
+        ),
         strict=True,
     ),
 ]
@@ -221,10 +231,13 @@ async def test_image_understanding(router: Router, provider: ProviderName, model
     message = ChatMessage(
         message=Message(
             role="user",
-            content=[
-                ResponseInputTextParam(type="input_text", text="What is in this image?"),
-                ResponseInputImageParam(type="input_image", image_url=data_url, detail="auto"),
-            ],
+            content=cast(
+                list[Any],
+                [
+                    ResponseInputTextParam(type="input_text", text="What is in this image?"),
+                    ResponseInputImageParam(type="input_image", image_url=data_url, detail="auto"),
+                ],
+            ),
         )
     )
     response = await router.create(input=[message], model=model)
@@ -258,7 +271,7 @@ async def test_image_in_tool_result(router: Router, provider: ProviderName, mode
     for chat_message in response.output:
         msg = chat_message.message
         if msg.get("type") == "function_call" and msg.get("name") == "read_image":
-            call_id = msg.get("call_id", "")
+            call_id = cast(str, msg.get("call_id", ""))
 
             image_path = Path(__file__).parents[1] / "integration" / "data" / "landscape.png"
             image_bytes = image_path.read_bytes()
@@ -269,7 +282,10 @@ async def test_image_in_tool_result(router: Router, provider: ProviderName, mode
                 ChatMessage(
                     message=FunctionCallOutput(
                         call_id=call_id,
-                        output=[ResponseInputImageContentParam(type="input_image", image_url=data_url, detail="auto")],
+                        output=cast(
+                            list[Any],
+                            [ResponseInputImageContentParam(type="input_image", image_url=data_url, detail="auto")],
+                        ),
                         type="function_call_output",
                     )
                 )
@@ -307,7 +323,7 @@ async def test_function_calling_basic(router: Router, provider: ProviderName, mo
     for chat_message in response.output:
         msg = chat_message.message
         if msg.get("type") == "function_call" and msg.get("name") == "get_weather":
-            call_id = msg.get("call_id", "")
+            call_id = cast(str, msg.get("call_id", ""))
             messages.append(
                 ChatMessage(
                     message=FunctionCallOutput(
@@ -352,7 +368,7 @@ async def test_function_calling_parallel(router: Router, provider: ProviderName,
         msg = chat_message.message
         if msg.get("type") == "function_call":
             name = msg.get("name", "")
-            call_id = msg.get("call_id", "")
+            call_id = cast(str, msg.get("call_id", ""))
             if name == "get_weather":
                 messages.append(
                     ChatMessage(
@@ -413,7 +429,7 @@ async def test_function_calling_parallel_reasoning(router: Router, provider: Pro
         msg = chat_message.message
         if msg.get("type") == "function_call":
             name = msg.get("name", "")
-            call_id = msg.get("call_id", "")
+            call_id = cast(str, msg.get("call_id", ""))
             if name == "get_weather":
                 messages.append(
                     ChatMessage(
@@ -598,7 +614,7 @@ async def test_image_gen_two(router: Router, provider: ProviderName, model: Supp
         for chat_message in response.output:
             msg = chat_message.message
             if msg.get("type") == "function_call" and msg.get("name") == "generate_image":
-                call_id = msg.get("call_id", "")
+                call_id = cast(str, msg.get("call_id", ""))
                 messages.append(
                     ChatMessage(
                         message=FunctionCallOutput(

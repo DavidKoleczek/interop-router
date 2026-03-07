@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 import json
 import time
-from typing import Any, Literal
+from typing import Any, Literal, cast
 import uuid
 
 import anthropic
@@ -85,6 +85,8 @@ class AnthropicProvider:
         text: ResponseTextConfigParam | None = None,
         tool_choice: response_create_params.ToolChoice | None = None,
         tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
         truncation: Literal["auto", "disabled"] | None = None,
         background: bool | None = None,
         provider_kwargs: dict[str, Any] | None = None,
@@ -230,8 +232,8 @@ class AnthropicProvider:
             elif input_message.get("type") == "function_call":
                 anthropic_interop = message.interop.get(AnthropicProvider.PROVIDER_NAME, {})
                 call_id = input_message.get("call_id") or ""
-                arguments_str = input_message.get("arguments") or "{}"
-                arguments = json.loads(arguments_str)
+                raw_arguments = input_message.get("arguments")
+                arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else {}
                 name = input_message.get("name") or ""
 
                 if anthropic_interop.get("type") == "server_tool_use":
@@ -406,7 +408,13 @@ class AnthropicProvider:
             if tool_type == "function":
                 name = tool.get("name") or ""
                 description = tool.get("description") or ""
-                parameters = tool.get("parameters") or {"type": "object", "properties": {}}
+                # Cast needed because ToolParam is a union of ~15 TypedDicts, and ty
+                # can't narrow it to FunctionToolParam even if the tool type is "function".
+                raw_parameters = tool.get("parameters")
+                parameters = cast(
+                    dict[str, object],
+                    raw_parameters if isinstance(raw_parameters, dict) else {"type": "object", "properties": {}},
+                )
                 anthropic_tools.append(
                     AnthropicToolParam(
                         name=name,

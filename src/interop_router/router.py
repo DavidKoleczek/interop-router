@@ -54,6 +54,8 @@ class Router:
         text: ResponseTextConfigParam | None = None,
         tool_choice: response_create_params.ToolChoice | None = None,
         tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
         truncation: Literal["auto", "disabled"] | None = None,
         background: bool | None = None,
         provider_kwargs: dict[str, Any] | None = None,
@@ -72,6 +74,10 @@ class Router:
             text: Optional text configuration.
             tool_choice: Optional tool choice configuration.
             tools: Optional list of tools.
+            top_logprobs: Optional number of most likely tokens to return at each
+              position (0-20). Only supported with reasoning effort "none".
+            top_p: Optional nucleus sampling parameter. Only supported with
+              reasoning effort "none".
             truncation: Optional truncation setting.
             background: Whether to run the model response in the background.
             provider_kwargs: Optional provider-specific keyword arguments.
@@ -100,6 +106,8 @@ class Router:
                 text=text,
                 tool_choice=tool_choice,
                 tools=tools,
+                top_logprobs=top_logprobs,
+                top_p=top_p,
                 truncation=truncation,
                 background=background,
             )
@@ -121,6 +129,8 @@ class Router:
                 text=text,
                 tool_choice=tool_choice,
                 tools=tools,
+                top_logprobs=top_logprobs,
+                top_p=top_p,
                 truncation=truncation,
             )
 
@@ -141,6 +151,8 @@ class Router:
                 text=text,
                 tool_choice=tool_choice,
                 tools=tools,
+                top_logprobs=top_logprobs,
+                top_p=top_p,
                 truncation=truncation,
                 provider_kwargs=provider_kwargs,
             )

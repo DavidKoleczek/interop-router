@@ -21,8 +21,12 @@ ProviderName: TypeAlias = Literal["openai", "gemini", "anthropic"]
 CreatedBy: TypeAlias = Literal["user"] | ProviderName
 
 SupportedModelOpenAI: TypeAlias = Literal[
-    "gpt-5.3-codex",  # manually added, not yet in the OpenAI package
-    "gpt-5.2-codex",  # manually added, not yet in the OpenAI package
+    "gpt-5.4",
+    "gpt-5.4-2026-03-05",
+    "gpt-5.4-pro-2026-03-05",
+    "gpt-5.4-pro",
+    "gpt-5.3-codex",
+    "gpt-5.2-codex",
     "gpt-5.2",
     "gpt-5.2-2025-12-11",
     "gpt-5.2-chat-latest",
@@ -51,7 +55,6 @@ SupportedModelGemini: TypeAlias = Literal[
     "gemini-3.1-pro-preview",
     "gemini-3.1-pro-preview-customtools",
     "gemini-3-flash-preview",
-    "gemini-3-pro-preview",
 ]
 
 SupportedModelAnthropic: TypeAlias = Literal[
@@ -187,6 +190,8 @@ class ResponsesAPIProtocol(Protocol):
         text: ResponseTextConfigParam | None = None,
         tool_choice: response_create_params.ToolChoice | None = None,
         tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
         truncation: Literal["auto", "disabled"] | None = None,
         background: bool | None = None,
         provider_kwargs: dict[str, Any] | None = None,

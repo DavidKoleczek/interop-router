@@ -49,6 +49,8 @@ class GeminiProvider:
         text: ResponseTextConfigParam | None = None,
         tool_choice: response_create_params.ToolChoice | None = None,
         tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
         truncation: Literal["auto", "disabled"] | None = None,
         background: bool | None = None,
     ) -> RouterResponse:
@@ -210,7 +212,8 @@ class GeminiProvider:
                             )
             elif input_message.get("type") == "function_call":
                 if input_message.get("name") == "image_generation":
-                    call_id = input_message.get("call_id", "")
+                    raw_call_id = input_message.get("call_id")
+                    call_id = raw_call_id if isinstance(raw_call_id, str) else ""
                     function_call_output = GeminiProvider._get_corresponding_function_call_output(call_id, input)
                     if function_call_output:
                         skip_messages.add(function_call_output.id)
@@ -249,8 +252,9 @@ class GeminiProvider:
                         thought_signature = GeminiProvider._get_thought_signature(input[i - 1].message)
 
                     fc_name = input_message.get("name", "")
+                    raw_arguments = input_message.get("arguments")
                     try:
-                        fc_arguments = json.loads(input_message.get("arguments", "{}"))
+                        fc_arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else {}
                     except json.JSONDecodeError:
                         fc_arguments = {}
                     function_call = types.FunctionCall(name=fc_name, args=fc_arguments)
@@ -264,7 +268,10 @@ class GeminiProvider:
                 previous_was_function_call = True
             elif input_message.get("type") == "function_call_output":
                 previous_was_function_call = False
-                fc_name = GeminiProvider._get_function_call_name_from_id(input, input_message.get("call_id", ""))
+                raw_call_id = input_message.get("call_id")
+                fc_name = GeminiProvider._get_function_call_name_from_id(
+                    input, raw_call_id if isinstance(raw_call_id, str) else ""
+                )
 
                 raw_output = input_message.get("output", "{}")
                 if isinstance(raw_output, list):

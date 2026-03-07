@@ -4,6 +4,7 @@
       "WebFetch",
       "WebSearch",
       "Bash(find:*)",
+      "Bash(grep:*)",
       "Bash(git clone:*)",
       "Bash(uv build:*)",
       "Bash(uv sync:*)",

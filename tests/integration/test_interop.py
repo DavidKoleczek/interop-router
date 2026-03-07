@@ -1,6 +1,7 @@
 """Integration tests to verify interoperability between providers."""
 
 import os
+from typing import cast
 
 from anthropic import AsyncAnthropic
 from google import genai
@@ -15,42 +16,49 @@ from interop_router.router import Router
 from interop_router.types import ChatMessage, SupportedModel
 
 INTEROP_PARAMS = [
-    pytest.param("gpt-5.2", "gemini-3-flash-preview", id="openai-to-gemini"),
-    pytest.param("gemini-3-flash-preview", "gpt-5.2", id="gemini-to-openai"),
-    pytest.param("gpt-5.2", "claude-haiku-4-5-20251001", id="openai-to-anthropic"),
-    pytest.param("claude-haiku-4-5-20251001", "gpt-5.2", id="anthropic-to-openai"),
-    pytest.param("gemini-3-flash-preview", "claude-haiku-4-5-20251001", id="gemini-to-anthropic"),
-    pytest.param("claude-haiku-4-5-20251001", "gemini-3-flash-preview", id="anthropic-to-gemini"),
+    pytest.param("gpt-5.4", "gemini-3.1-flash-lite-preview", id="openai-to-gemini"),
+    pytest.param("gemini-3.1-flash-lite-preview", "gpt-5.4", id="gemini-to-openai"),
+    pytest.param("gpt-5.4", "claude-sonnet-4-6", id="openai-to-anthropic"),
+    pytest.param("claude-sonnet-4-6", "gpt-5.4", id="anthropic-to-openai"),
+    pytest.param("gemini-3.1-flash-lite-preview", "claude-sonnet-4-6", id="gemini-to-anthropic"),
+    pytest.param("claude-sonnet-4-6", "gemini-3.1-flash-lite-preview", id="anthropic-to-gemini"),
 ]
+
 
 FUNCTION_TOOLS: list[FunctionToolParam] = [
     FunctionToolParam(
         type="function",
         name="get_weather",
         description="Get the current weather for a given location.",
-        parameters={
-            "type": "object",
-            "properties": {
-                "location": {"type": "string", "description": "The city and country"},
-                "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+        parameters=cast(
+            dict[str, object],
+            {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "The city and country"},
+                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+                },
+                "required": ["location", "unit"],
+                "additionalProperties": False,
             },
-            "required": ["location", "unit"],
-            "additionalProperties": False,
-        },
+        ),
         strict=True,
     ),
     FunctionToolParam(
         type="function",
         name="get_stock_price",
         description="Get the current stock price for a given ticker symbol.",
-        parameters={
-            "type": "object",
-            "properties": {
-                "ticker": {"type": "string", "description": "The stock ticker symbol"},
+        parameters=cast(
+            dict[str, object],
+            {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string", "description": "The stock ticker symbol"},
+                },
+                "required": ["ticker"],
+                "additionalProperties": False,
             },
-            "required": ["ticker"],
-            "additionalProperties": False,
-        },
+        ),
         strict=True,
     ),
 ]
@@ -221,7 +229,7 @@ async def test_function_call_handoff(router: Router, first_model: SupportedModel
             messages.append(
                 ChatMessage(
                     message=FunctionCallOutput(
-                        call_id=msg.message.get("call_id", ""),
+                        call_id=cast(str, msg.message.get("call_id", "")),
                         output='{"temperature": 22, "unit": "celsius", "conditions": "sunny"}',
                         type="function_call_output",
                     )
@@ -248,7 +256,7 @@ async def test_function_calling_roundtrip(router: Router, first_model: Supported
             messages.append(
                 ChatMessage(
                     message=FunctionCallOutput(
-                        call_id=msg.message.get("call_id", ""),
+                        call_id=cast(str, msg.message.get("call_id", "")),
                         output='{"temperature": 22, "unit": "celsius", "conditions": "sunny"}',
                         type="function_call_output",
                     )
@@ -292,7 +300,7 @@ async def test_function_calling_parallel_roundtrip(
     for msg in response1.output:
         if msg.message.get("type") == "function_call":
             name = msg.message.get("name", "")
-            call_id = msg.message.get("call_id", "")
+            call_id = cast(str, msg.message.get("call_id", ""))
             if name == "get_weather":
                 messages.append(
                     ChatMessage(
@@ -329,13 +337,13 @@ async def test_function_calling_parallel_roundtrip(
 
 IMAGE_GEN_INTEROP_PARAMS = [
     pytest.param(
-        ("gemini-3-flash-preview", "gemini-3-pro-image-preview"),
-        ("gpt-5.2", "gpt-image-1.5"),
+        ("gemini-3.1-flash-lite-preview", "gemini-3-pro-image-preview"),
+        ("gpt-5.4", "gpt-image-1.5"),
         id="gemini-image-to-openai",
     ),
     pytest.param(
-        ("gpt-5.2", "gpt-image-1.5"),
-        ("gemini-3-flash-preview", "gemini-3-pro-image-preview"),
+        ("gpt-5.4", "gpt-image-1.5"),
+        ("gemini-3.1-flash-lite-preview", "gemini-3-pro-image-preview"),
         id="openai-to-gemini-image",
     ),
 ]

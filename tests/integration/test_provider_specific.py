@@ -3,12 +3,12 @@ import os
 from anthropic import AsyncAnthropic
 from google import genai
 from openai import AsyncOpenAI
-from openai.types.responses import EasyInputMessageParam
+from openai.types.responses import EasyInputMessageParam, ResponseTextConfigParam
 from openai.types.responses.tool_param import ImageGeneration
 import pytest
 
 from interop_router.router import Router
-from interop_router.types import ChatMessage, SupportedModelAnthropic
+from interop_router.types import ChatMessage, SupportedModelAnthropic, SupportedModelOpenAI
 
 
 @pytest.fixture
@@ -152,11 +152,56 @@ async def test_image_gen_with_thinking(router: Router) -> None:
 
     response = await router.create(
         input=messages,
-        model="gemini-3-flash-preview",
+        model="gemini-3.1-flash-lite-preview",
         tools=[image_tool],
         reasoning={"effort": "medium", "summary": "auto"},
         include=["reasoning.encrypted_content"],
     )
+    assert response is not None
+    assert response.output
+
+
+# endregion
+
+# region: OpenAI models
+
+OPENAI_MODELS: list[SupportedModelOpenAI] = ["gpt-5.4"]
+
+
+@pytest.mark.parametrize("model", OPENAI_MODELS)
+async def test_verbosity(router: Router, model: SupportedModelOpenAI) -> None:
+    """Verbosity parameter controls response length."""
+    messages = [
+        ChatMessage(message=EasyInputMessageParam(role="user", content="Explain what a binary tree is.")),
+    ]
+
+    response = await router.create(
+        model=model,
+        input=messages,
+        text=ResponseTextConfigParam(verbosity="low"),
+    )
+
+    assert response is not None
+    assert response.output
+
+
+@pytest.mark.parametrize("model", OPENAI_MODELS)
+async def test_sampling_params_with_no_reasoning(router: Router, model: SupportedModelOpenAI) -> None:
+    """temperature, top_p, and top_logprobs are only valid with effort 'none' for GPT-5 family models."""
+    messages = [
+        ChatMessage(message=EasyInputMessageParam(role="user", content="Write a creative one-sentence story.")),
+    ]
+
+    response = await router.create(
+        model=model,
+        input=messages,
+        temperature=0.9,
+        top_p=0.9,
+        top_logprobs=5,
+        reasoning={"effort": "none"},
+        include=["message.output_text.logprobs"],
+    )
+
     assert response is not None
     assert response.output
 
