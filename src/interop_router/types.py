@@ -21,12 +21,21 @@ ProviderName: TypeAlias = Literal["openai", "gemini", "anthropic"]
 CreatedBy: TypeAlias = Literal["user"] | ProviderName
 
 SupportedModelOpenAI: TypeAlias = Literal[
+    "gpt-5.5",
+    "gpt-5.5-2026-04-23",
+    "gpt-5.5-pro",
+    "gpt-5.5-pro-2026-04-23",
     "gpt-5.4",
-    "gpt-5.4-2026-03-05",
-    "gpt-5.4-pro-2026-03-05",
-    "gpt-5.4-pro",
-    "gpt-5.3-codex",
-    "gpt-5.2-codex",
+    "gpt-5.4-2026-03-05",  # Manually added: not in openai SDK
+    "gpt-5.4-pro-2026-03-05",  # Manually added: not in openai SDK
+    "gpt-5.4-pro",  # Manually added: not in openai SDK
+    "gpt-5.4-mini",
+    "gpt-5.4-mini-2026-03-17",
+    "gpt-5.4-nano",
+    "gpt-5.4-nano-2026-03-17",
+    "gpt-5.3-codex",  # Manually added: not in openai SDK
+    "gpt-5.3-chat-latest",
+    "gpt-5.2-codex",  # Manually added: not in openai SDK
     "gpt-5.2",
     "gpt-5.2-2025-12-11",
     "gpt-5.2-chat-latest",
@@ -39,7 +48,6 @@ SupportedModelOpenAI: TypeAlias = Literal[
     "gpt-5.1",
     "gpt-5.1-2025-11-13",
     "gpt-5.1-codex",
-    "gpt-5.1-mini",
     "gpt-5.1-chat-latest",
     "gpt-5",
     "gpt-5-mini",
@@ -51,13 +59,17 @@ SupportedModelOpenAI: TypeAlias = Literal[
 ]
 
 SupportedModelGemini: TypeAlias = Literal[
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
     "gemini-3.1-flash-lite-preview",
     "gemini-3.1-pro-preview",
-    "gemini-3.1-pro-preview-customtools",
+    "gemini-3.1-pro-preview-customtools",  # Manually added: not in google-genai SDK
     "gemini-3-flash-preview",
 ]
 
 SupportedModelAnthropic: TypeAlias = Literal[
+    "claude-opus-4-7",
+    "claude-mythos-preview",
     "claude-opus-4-6",
     "claude-sonnet-4-6",
     "claude-opus-4-5",

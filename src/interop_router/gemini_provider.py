@@ -2,7 +2,7 @@ import base64
 from collections.abc import Iterable
 import json
 import time
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 import uuid
 
 from google import genai
@@ -30,7 +30,7 @@ from interop_router.types import ChatMessage, ContextLimitExceededError, RouterR
 
 
 class GeminiProvider:
-    PROVIDER_NAME = "gemini"
+    PROVIDER_NAME: ClassVar[Literal["gemini"]] = "gemini"
     DUMMY_THOUGHT_SIGNATURE = b"skip_thought_signature_validator"
     IMAGE_MODELS_WITH_THINKING_LEVELS: ClassVar[set[str]] = {"gemini-3.1-flash-image-preview"}
 
@@ -228,22 +228,24 @@ class GeminiProvider:
                         parts: list[types.Part] = []
                         if isinstance(output_content, list):
                             for idx, item in enumerate(output_content):
-                                if isinstance(item, dict) and item.get("type") == "input_image":
-                                    # Convert each image_url to bytes that Gemini expects
-                                    image_url = item.get("image_url", "")
-                                    if image_url.startswith("data:"):
-                                        header, base64_data = image_url.split(",", 1)
-                                        mime_type = header.split(":")[1].split(";")[0]
-                                        image_bytes = base64.b64decode(base64_data)
-                                        # Only first part gets thought_signature
-                                        part_thought_sig = thought_signature if idx == 0 else None
-                                        # Create parts with inline data for each image
-                                        parts.append(
-                                            types.Part(
-                                                inline_data=types.Blob(data=image_bytes, mime_type=mime_type),
-                                                thought_signature=part_thought_sig,
+                                if isinstance(item, dict):
+                                    item_dict = cast(dict[str, Any], item)
+                                    if item_dict.get("type") == "input_image":
+                                        # Convert each image_url to bytes that Gemini expects
+                                        image_url = item_dict.get("image_url", "")
+                                        if image_url.startswith("data:"):
+                                            header, base64_data = image_url.split(",", 1)
+                                            mime_type = header.split(":")[1].split(";")[0]
+                                            image_bytes = base64.b64decode(base64_data)
+                                            # Only first part gets thought_signature
+                                            part_thought_sig = thought_signature if idx == 0 else None
+                                            # Create parts with inline data for each image
+                                            parts.append(
+                                                types.Part(
+                                                    inline_data=types.Blob(data=image_bytes, mime_type=mime_type),
+                                                    thought_signature=part_thought_sig,
+                                                )
                                             )
-                                        )
                         if parts:
                             gemini_content.append(types.Content(parts=parts, role="model"))
                 else:

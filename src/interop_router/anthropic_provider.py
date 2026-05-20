@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 import json
 import time
-from typing import Any, Literal, cast
+from typing import Any, ClassVar, Literal, cast
 import uuid
 
 import anthropic
@@ -67,7 +67,7 @@ from interop_router.types import (
 
 
 class AnthropicProvider:
-    PROVIDER_NAME = "anthropic"
+    PROVIDER_NAME: ClassVar[Literal["anthropic"]] = "anthropic"
     REDACTED_THINKING_BLOCK_ID = "REDACTEDTHINKINGBLOCK"
 
     @staticmethod

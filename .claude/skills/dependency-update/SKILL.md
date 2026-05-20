@@ -7,10 +7,12 @@ disable-model-invocation: true
 I need you to update the dependencies in pyproject.toml.
 The process to go through is:
 
-1. Notice how we do versioning. We make sure that we do not auto upgrade to the major version. For example, "openai[aiohttp]>=2.9,<3.0", means we will never upgrade to v3.x. You will just be updating minor versions. Note that for dev dependencies we don't need to pin to be less than the major version. Additionally, do not touch uv_build or anything outside `dependencies` or `[dependency-groups]`
+1. Notice how we do versioning. We make sure that we do not auto upgrade to the major version. For example, "openai[aiohttp]>=2.9,<3.0", means we will never upgrade to v3.x. You will just be updating minor versions. Note that for dev dependencies we don't need to pin to be less than the major version. Do not touch anything outside `dependencies`, `[dependency-groups]`, or `[build-system].requires`.
 2. For each dependency, go to its PyPI JSON site. For example, for the openai package that is: https://pypi.org/pypi/openai/json Get the latest release version.
 3. Now bump the dependency in pyproject.toml. For example, if the current version in the pyproject.toml is `>=1.05,<2.0`, but on Pypi the latest version is 1.11, change the dependency to `>=1.11,<2.0`
 4. If you notice a major version upgrade (ex v2 to v3), let the user know of each of those cases, but do not make the change yourself.
-5. Also update the `rev` fields in `.pre-commit-config.yaml` to the latest versions of each hook (check PyPI for the corresponding packages). Run `prek run --all-files` to verify the hooks still pass.
-6. Make sure all the checks still pass by running `uv run ruff format && uv run ruff check --fix && uv run ty check` from the root.
-7. Run `uv sync -U --all-extras --all-groups` to update the lock file.
+5. Bump the `uv_build` pin in `[build-system].requires` to the latest version on PyPI (https://pypi.org/pypi/uv-build/json), using the same `>=X.Y.Z,<X.(Y+1).0` style as the other pins. Major version bumps are allowed here. After updating, run `uv build` from the root and confirm it does not emit the `build_system.requires ... does not contain the current uv version` warning.
+6. Update the `rev` fields in `.pre-commit-config.yaml` to the latest versions of each hook (check PyPI for the corresponding packages). Run `prek run --all-files` to verify the hooks still pass.
+7. Update the `uses:` action versions in every workflow file under `.github/workflows/`. For each action (e.g. `actions/checkout`, `astral-sh/setup-uv`), look up the latest release with `gh api repos/<owner>/<repo>/releases/latest --jq '.tag_name'` and bump the pinned major tag (e.g. `@v7` to `@v8`) to match. Leave floating branch refs like `pypa/gh-action-pypi-publish@release/v1` alone since they are the upstream-recommended pattern.
+8. Make sure all the checks still pass by running `uv run ruff format && uv run ruff check --fix && uv run ty check` from the root.
+9. Run `uv sync -U --all-extras --all-groups` to update the lock file.

@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import Iterable
 import json
 import time
-from typing import Any, Literal, cast
+from typing import Any, ClassVar, Literal, cast
 import uuid
 
 import openai
@@ -35,7 +35,7 @@ from interop_router.types import (
 
 
 class OpenAIProvider:
-    PROVIDER_NAME = "openai"
+    PROVIDER_NAME: ClassVar[Literal["openai"]] = "openai"
 
     @staticmethod
     async def create(
