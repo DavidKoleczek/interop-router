@@ -1,14 +1,15 @@
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass, field
 import datetime
 import json
-from typing import Any, Literal, Protocol, TypeAlias
+from typing import Any, Literal, Protocol, TypeAlias, overload
 import uuid
 
 from openai.types.responses import (
     ResponseError,
     ResponseIncludable,
     ResponseInputItemParam,
+    ResponseStreamEvent,
     ResponseTextConfigParam,
     ResponseUsage,
     ToolParam,
@@ -170,6 +171,9 @@ class RouterResponse:
     duration_seconds: float | None = None
 
 
+RouterStream: TypeAlias = AsyncIterator[ResponseStreamEvent | RouterResponse]
+
+
 class InteropRouterError(Exception):
     def __init__(self, message: str, provider: ProviderName, cause: Exception | None = None) -> None:
         super().__init__(message)
@@ -187,6 +191,8 @@ class ResponsesAPIProtocol(Protocol):
     Uses OpenAI's Responses API types as the common denominator.
     """
 
+    # Non-streaming overload: `stream` omitted or False narrows the return to RouterResponse.
+    @overload
     async def create(
         self,
         *,
@@ -207,7 +213,83 @@ class ResponsesAPIProtocol(Protocol):
         truncation: Literal["auto", "disabled"] | None = None,
         background: bool | None = None,
         provider_kwargs: dict[str, Any] | None = None,
+        stream: Literal[False] | None = None,
     ) -> RouterResponse: ...
+
+    # Streaming overload: `stream=True` is required (no default) and narrows the return to RouterStream.
+    @overload
+    async def create(
+        self,
+        *,
+        stream: Literal[True],
+        client: Any,
+        input: list[ChatMessage],
+        model: SupportedModel,
+        include: list[ResponseIncludable] | None = None,
+        instructions: str | None = None,
+        max_output_tokens: int | None = None,
+        parallel_tool_calls: bool | None = None,
+        reasoning: Reasoning | None = None,
+        temperature: float | None = None,
+        text: ResponseTextConfigParam | None = None,
+        tool_choice: response_create_params.ToolChoice | None = None,
+        tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
+        truncation: Literal["auto", "disabled"] | None = None,
+        background: bool | None = None,
+        provider_kwargs: dict[str, Any] | None = None,
+    ) -> RouterStream: ...
+
+    # Runtime-bool fallback: required when callers pass a `bool` variable that the
+    # type checker cannot narrow to `Literal[True]` or `Literal[False]`.
+    @overload
+    async def create(
+        self,
+        *,
+        stream: bool,
+        client: Any,
+        input: list[ChatMessage],
+        model: SupportedModel,
+        include: list[ResponseIncludable] | None = None,
+        instructions: str | None = None,
+        max_output_tokens: int | None = None,
+        parallel_tool_calls: bool | None = None,
+        reasoning: Reasoning | None = None,
+        temperature: float | None = None,
+        text: ResponseTextConfigParam | None = None,
+        tool_choice: response_create_params.ToolChoice | None = None,
+        tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
+        truncation: Literal["auto", "disabled"] | None = None,
+        background: bool | None = None,
+        provider_kwargs: dict[str, Any] | None = None,
+    ) -> RouterResponse | RouterStream: ...
+
+    # Implementation signature: broadest types; the overloads above are what callers see.
+    async def create(
+        self,
+        *,
+        client: Any,
+        input: list[ChatMessage],
+        model: SupportedModel,
+        include: list[ResponseIncludable] | None = None,
+        instructions: str | None = None,
+        max_output_tokens: int | None = None,
+        parallel_tool_calls: bool | None = None,
+        reasoning: Reasoning | None = None,
+        temperature: float | None = None,
+        text: ResponseTextConfigParam | None = None,
+        tool_choice: response_create_params.ToolChoice | None = None,
+        tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
+        truncation: Literal["auto", "disabled"] | None = None,
+        background: bool | None = None,
+        provider_kwargs: dict[str, Any] | None = None,
+        stream: bool | None = None,
+    ) -> RouterResponse | RouterStream: ...
 
     async def count_tokens(
         self,

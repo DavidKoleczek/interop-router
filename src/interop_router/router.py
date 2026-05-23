@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from typing import Any, Literal, cast, get_args
+from typing import Any, Literal, cast, get_args, overload
 
 from anthropic import AsyncAnthropic
 from google import genai
@@ -15,6 +15,7 @@ from interop_router.types import (
     ChatMessage,
     ProviderName,
     RouterResponse,
+    RouterStream,
     SupportedModel,
     SupportedModelAnthropic,
     SupportedModelGemini,
@@ -40,6 +41,8 @@ class Router:
             return "anthropic"
         raise ValueError(f"Unknown model: {model}")
 
+    # Non-streaming overload: `stream` omitted or False narrows the return to RouterResponse.
+    @overload
     async def create(
         self,
         *,
@@ -59,7 +62,79 @@ class Router:
         truncation: Literal["auto", "disabled"] | None = None,
         background: bool | None = None,
         provider_kwargs: dict[str, Any] | None = None,
-    ) -> RouterResponse:
+        stream: Literal[False] | None = None,
+    ) -> RouterResponse: ...
+
+    # Streaming overload: `stream=True` is required (no default) and narrows the return to RouterStream.
+    @overload
+    async def create(
+        self,
+        *,
+        stream: Literal[True],
+        input: list[ChatMessage],
+        model: SupportedModel,
+        include: list[ResponseIncludable] | None = None,
+        instructions: str | None = None,
+        max_output_tokens: int | None = None,
+        parallel_tool_calls: bool | None = None,
+        reasoning: Reasoning | None = None,
+        temperature: float | None = None,
+        text: ResponseTextConfigParam | None = None,
+        tool_choice: response_create_params.ToolChoice | None = None,
+        tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
+        truncation: Literal["auto", "disabled"] | None = None,
+        background: bool | None = None,
+        provider_kwargs: dict[str, Any] | None = None,
+    ) -> RouterStream: ...
+
+    # Runtime-bool fallback: required when callers pass a `bool` variable that the
+    # type checker cannot narrow to `Literal[True]` or `Literal[False]`.
+    @overload
+    async def create(
+        self,
+        *,
+        stream: bool,
+        input: list[ChatMessage],
+        model: SupportedModel,
+        include: list[ResponseIncludable] | None = None,
+        instructions: str | None = None,
+        max_output_tokens: int | None = None,
+        parallel_tool_calls: bool | None = None,
+        reasoning: Reasoning | None = None,
+        temperature: float | None = None,
+        text: ResponseTextConfigParam | None = None,
+        tool_choice: response_create_params.ToolChoice | None = None,
+        tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
+        truncation: Literal["auto", "disabled"] | None = None,
+        background: bool | None = None,
+        provider_kwargs: dict[str, Any] | None = None,
+    ) -> RouterResponse | RouterStream: ...
+
+    async def create(
+        self,
+        *,
+        input: list[ChatMessage],
+        model: SupportedModel,
+        include: list[ResponseIncludable] | None = None,
+        instructions: str | None = None,
+        max_output_tokens: int | None = None,
+        parallel_tool_calls: bool | None = None,
+        reasoning: Reasoning | None = None,
+        temperature: float | None = None,
+        text: ResponseTextConfigParam | None = None,
+        tool_choice: response_create_params.ToolChoice | None = None,
+        tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
+        truncation: Literal["auto", "disabled"] | None = None,
+        background: bool | None = None,
+        provider_kwargs: dict[str, Any] | None = None,
+        stream: bool | None = None,
+    ) -> RouterResponse | RouterStream:
         """Create a response using the appropriate provider for the given model.
 
         Args:
@@ -80,19 +155,85 @@ class Router:
               reasoning effort "none".
             truncation: Optional truncation setting.
             background: Whether to run the model response in the background.
+              Mutually exclusive with stream=True.
             provider_kwargs: Optional provider-specific keyword arguments.
               See the PROVIDER_GUIDE.md for details.
+            stream: If set to true, the model response data will be streamed as events are generated.
+              The last event will always be RouterResponse
 
         Returns:
-            The response from the provider.
+            A RouterResponse when stream is False or omitted, otherwise a RouterStream.
 
         Raises:
-            ValueError: If no client is registered for the required provider.
+            ValueError: If no client is registered for the required provider, if the
+                model is unknown, or if stream=True is combined with background=True.
         """
-        if model in get_args(SupportedModelOpenAI):
-            client = self._clients.get("openai")
-            if client is None:
-                raise ValueError("No client registered for provider: openai")
+        if stream and background:
+            raise ValueError("stream=True is not compatible with background=True")
+
+        if stream:
+            return await self._dispatch_stream(
+                input=input,
+                model=model,
+                include=include,
+                instructions=instructions,
+                max_output_tokens=max_output_tokens,
+                parallel_tool_calls=parallel_tool_calls,
+                reasoning=reasoning,
+                temperature=temperature,
+                text=text,
+                tool_choice=tool_choice,
+                tools=tools,
+                top_logprobs=top_logprobs,
+                top_p=top_p,
+                truncation=truncation,
+            )
+
+        return await self._dispatch_create(
+            input=input,
+            model=model,
+            include=include,
+            instructions=instructions,
+            max_output_tokens=max_output_tokens,
+            parallel_tool_calls=parallel_tool_calls,
+            reasoning=reasoning,
+            temperature=temperature,
+            text=text,
+            tool_choice=tool_choice,
+            tools=tools,
+            top_logprobs=top_logprobs,
+            top_p=top_p,
+            truncation=truncation,
+            background=background,
+            provider_kwargs=provider_kwargs,
+        )
+
+    async def _dispatch_create(
+        self,
+        *,
+        input: list[ChatMessage],
+        model: SupportedModel,
+        include: list[ResponseIncludable] | None,
+        instructions: str | None,
+        max_output_tokens: int | None,
+        parallel_tool_calls: bool | None,
+        reasoning: Reasoning | None,
+        temperature: float | None,
+        text: ResponseTextConfigParam | None,
+        tool_choice: response_create_params.ToolChoice | None,
+        tools: Iterable[ToolParam] | None,
+        top_logprobs: int | None,
+        top_p: float | None,
+        truncation: Literal["auto", "disabled"] | None,
+        background: bool | None,
+        provider_kwargs: dict[str, Any] | None,
+    ) -> RouterResponse:
+        provider = self._get_provider_for_model(model)
+        client = self._clients.get(provider)
+        if client is None:
+            raise ValueError(f"No client registered for provider: {provider}")
+
+        if provider == "openai":
             return await OpenAIProvider.create(
                 client=client,
                 input=input,
@@ -112,10 +253,7 @@ class Router:
                 background=background,
             )
 
-        if model in get_args(SupportedModelGemini):
-            client = self._clients.get("gemini")
-            if client is None:
-                raise ValueError("No client registered for provider: gemini")
+        if provider == "gemini":
             return await GeminiProvider.create(
                 client=client,
                 input=input,
@@ -134,14 +272,53 @@ class Router:
                 truncation=truncation,
             )
 
-        if model in get_args(SupportedModelAnthropic):
-            client = self._clients.get("anthropic")
-            if client is None:
-                raise ValueError("No client registered for provider: anthropic")
-            return await AnthropicProvider.create(
+        return await AnthropicProvider.create(
+            client=client,
+            input=input,
+            model=cast(SupportedModelAnthropic, model),
+            include=include,
+            instructions=instructions,
+            max_output_tokens=max_output_tokens,
+            parallel_tool_calls=parallel_tool_calls,
+            reasoning=reasoning,
+            temperature=temperature,
+            text=text,
+            tool_choice=tool_choice,
+            tools=tools,
+            top_logprobs=top_logprobs,
+            top_p=top_p,
+            truncation=truncation,
+            provider_kwargs=provider_kwargs,
+        )
+
+    async def _dispatch_stream(
+        self,
+        *,
+        input: list[ChatMessage],
+        model: SupportedModel,
+        include: list[ResponseIncludable] | None,
+        instructions: str | None,
+        max_output_tokens: int | None,
+        parallel_tool_calls: bool | None,
+        reasoning: Reasoning | None,
+        temperature: float | None,
+        text: ResponseTextConfigParam | None,
+        tool_choice: response_create_params.ToolChoice | None,
+        tools: Iterable[ToolParam] | None,
+        top_logprobs: int | None,
+        top_p: float | None,
+        truncation: Literal["auto", "disabled"] | None,
+    ) -> RouterStream:
+        provider = self._get_provider_for_model(model)
+        client = self._clients.get(provider)
+        if client is None:
+            raise ValueError(f"No client registered for provider: {provider}")
+
+        if provider == "openai":
+            return await OpenAIProvider.create_stream(
                 client=client,
                 input=input,
-                model=cast(SupportedModelAnthropic, model),
+                model=cast(SupportedModelOpenAI, model),
                 include=include,
                 instructions=instructions,
                 max_output_tokens=max_output_tokens,
@@ -154,10 +331,44 @@ class Router:
                 top_logprobs=top_logprobs,
                 top_p=top_p,
                 truncation=truncation,
-                provider_kwargs=provider_kwargs,
             )
 
-        raise ValueError(f"Unknown model: {model}")
+        if provider == "gemini":
+            return await GeminiProvider.create_stream(
+                client=client,
+                input=input,
+                model=cast(SupportedModelGemini, model),
+                include=include,
+                instructions=instructions,
+                max_output_tokens=max_output_tokens,
+                parallel_tool_calls=parallel_tool_calls,
+                reasoning=reasoning,
+                temperature=temperature,
+                text=text,
+                tool_choice=tool_choice,
+                tools=tools,
+                top_logprobs=top_logprobs,
+                top_p=top_p,
+                truncation=truncation,
+            )
+
+        return await AnthropicProvider.create_stream(
+            client=client,
+            input=input,
+            model=cast(SupportedModelAnthropic, model),
+            include=include,
+            instructions=instructions,
+            max_output_tokens=max_output_tokens,
+            parallel_tool_calls=parallel_tool_calls,
+            reasoning=reasoning,
+            temperature=temperature,
+            text=text,
+            tool_choice=tool_choice,
+            tools=tools,
+            top_logprobs=top_logprobs,
+            top_p=top_p,
+            truncation=truncation,
+        )
 
     async def count_tokens(
         self,

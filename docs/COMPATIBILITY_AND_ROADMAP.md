@@ -18,7 +18,7 @@ For a list of supported models, see `SupportedModel` in [types.py](../src/intero
 | Other Built-in Tools (Code execution, file search, etc) | TBD | TBD | TBD |
 | Audio Model Support | No | No | N/A |
 | Video Generation Model Support | No | No | N/A |
-| Streaming Support | No | No | No |
+| Streaming Support | Yes | Yes | Yes |
 
 * All providers encrypt or do not allow reasoning to be modified. As such InteropRouter cannot and does not use any non-native reasoning content when switching providers.
 

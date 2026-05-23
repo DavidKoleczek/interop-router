@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 import json
 import time
 from typing import Any, ClassVar, Literal, cast
@@ -6,23 +6,29 @@ import uuid
 
 import anthropic
 from anthropic import NOT_GIVEN, AsyncAnthropic
+from anthropic.lib.streaming import ParsedMessageStreamEvent
 from anthropic.types import (
     Base64ImageSourceParam,
     ImageBlockParam,
+    InputJSONDelta,
     Message,
     MessageParam,
     OutputConfigParam,
+    RawContentBlockDeltaEvent,
+    RawContentBlockStartEvent,
     RedactedThinkingBlock,
     RedactedThinkingBlockParam,
     ServerToolUseBlock,
     ServerToolUseBlockParam,
     TextBlock,
     TextBlockParam,
+    TextDelta,
     ThinkingBlock,
     ThinkingBlockParam,
     ThinkingConfigAdaptiveParam,
     ThinkingConfigDisabledParam,
     ThinkingConfigEnabledParam,
+    ThinkingDelta,
     ToolChoiceAnyParam,
     ToolChoiceAutoParam,
     ToolChoiceNoneParam,
@@ -43,17 +49,32 @@ from anthropic.types import ToolParam as AnthropicToolParam
 from anthropic.types.beta import BetaWebFetchTool20250910Param, BetaWebFetchToolResultBlockParam
 from anthropic.types.web_search_tool_20250305_param import UserLocation as AnthropicUserLocation
 from openai.types.responses import (
+    Response,
     ResponseFunctionToolCallParam,
     ResponseIncludable,
     ResponseOutputTextParam,
+    ResponseStreamEvent,
     ResponseTextConfigParam,
     ResponseUsage,
     ToolParam,
     response_create_params,
 )
+from openai.types.responses.response_created_event import ResponseCreatedEvent
+from openai.types.responses.response_function_call_arguments_delta_event import ResponseFunctionCallArgumentsDeltaEvent
+from openai.types.responses.response_function_web_search import (
+    ActionSearch,
+    ActionSearchSource,
+    ResponseFunctionWebSearch,
+)
 from openai.types.responses.response_input_item_param import FunctionCallOutput
+from openai.types.responses.response_output_item_added_event import ResponseOutputItemAddedEvent
+from openai.types.responses.response_output_item_done_event import ResponseOutputItemDoneEvent
+from openai.types.responses.response_output_message import ResponseOutputMessage
 from openai.types.responses.response_output_message_param import ResponseOutputMessageParam
+from openai.types.responses.response_reasoning_item import ResponseReasoningItem
 from openai.types.responses.response_reasoning_item_param import ResponseReasoningItemParam, Summary
+from openai.types.responses.response_reasoning_summary_text_delta_event import ResponseReasoningSummaryTextDeltaEvent
+from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
 from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 from openai.types.shared_params.reasoning import Reasoning
 
@@ -62,6 +83,7 @@ from interop_router.types import (
     ContextLimitExceededError,
     ProviderName,
     RouterResponse,
+    RouterStream,
     SupportedModelAnthropic,
 )
 
@@ -115,6 +137,74 @@ class AnthropicProvider:
         interop_response = AnthropicProvider._convert_response(response)
         interop_response.duration_seconds = duration_seconds
         return interop_response
+
+    @staticmethod
+    async def create_stream(
+        *,
+        client: AsyncAnthropic,
+        input: list[ChatMessage],
+        model: SupportedModelAnthropic,
+        include: list[ResponseIncludable] | None = None,
+        instructions: str | None = None,
+        max_output_tokens: int | None = None,
+        parallel_tool_calls: bool | None = None,
+        reasoning: Reasoning | None = None,
+        temperature: float | None = None,
+        text: ResponseTextConfigParam | None = None,
+        tool_choice: response_create_params.ToolChoice | None = None,
+        tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
+        truncation: Literal["auto", "disabled"] | None = None,
+        provider_kwargs: dict[str, Any] | None = None,
+    ) -> RouterStream:
+        preprocessed_input, system_instruction = AnthropicProvider._preprocess_input(input)
+        anthropic_messages = AnthropicProvider._convert_input_messages(preprocessed_input)
+        config = AnthropicProvider._create_config(
+            model, max_output_tokens, temperature, reasoning, tool_choice, tools, system_instruction, provider_kwargs
+        )
+        start_time = time.perf_counter()
+        # `client.messages.stream(...)` returns an AsyncMessageStreamManager (a context manager, not awaitable).
+        # Enter it eagerly so connection errors surface from create_stream itself
+        stream_manager = client.messages.stream(
+            messages=anthropic_messages,
+            model=model,
+            **config,
+        )
+        try:
+            sdk_stream = await stream_manager.__aenter__()
+        except anthropic.BadRequestError as e:
+            if "prompt is too long" in str(e):
+                raise ContextLimitExceededError(str(e), provider="anthropic", cause=e) from e
+            raise
+
+        async def _stream() -> AsyncIterator[ResponseStreamEvent | RouterResponse]:
+            final_message: Message | None = None
+            duration_seconds: float | None = None
+            try:
+                sequence_number = 0
+                async for event in sdk_stream:
+                    converted_event = AnthropicProvider._convert_stream_event(event, sequence_number)
+                    if converted_event:
+                        yield converted_event
+                    sequence_number += 1
+                final_message = await sdk_stream.get_final_message()
+                duration_seconds = time.perf_counter() - start_time
+            except anthropic.BadRequestError as e:
+                if "prompt is too long" in str(e):
+                    raise ContextLimitExceededError(str(e), provider="anthropic", cause=e) from e
+                raise
+            finally:
+                await sdk_stream.close()
+
+            if final_message is None or duration_seconds is None:
+                raise RuntimeError("Response stream ended without a final message.")
+
+            interop_response = AnthropicProvider._convert_response(final_message)
+            interop_response.duration_seconds = duration_seconds
+            yield interop_response
+
+        return _stream()
 
     @staticmethod
     async def count_tokens(
@@ -629,3 +719,138 @@ class AnthropicProvider:
             output_tokens_details=output_tokens_details,
             total_tokens=total_tokens,
         )
+
+    @staticmethod
+    def _convert_stream_event(event: ParsedMessageStreamEvent, sequence_number: int) -> ResponseStreamEvent | None:
+        """
+        These are the important Anthropic events to convert.
+        Mapped as (Anthropic Event/Type) -> (OpenAI/Interop Event/Type)
+        RawContentBlockStartEvent -> ResponseOutputItemAddedEvent
+          - ThinkingBlock -> ResponseReasoningItem
+          - ServerToolUseBlock (necessary for tool name) -> ResponseFunctionWebSearch
+          - TextBlock -> ResponseOutputText
+          - WebSearchToolResultBlock -> ResponseOutputItemDoneEvent, ResponseFunctionWebSearch (note this one does *not* fall under ResponseOutputItemAddedEvent)
+        RawContentBlockDeltaEvent
+          - ThinkingDelta -> ResponseReasoningSummaryTextDeltaEvent
+          - InputJSONDelta -> ResponseFunctionCallArgumentsDeltaEvent
+          - TextDelta -> ResponseTextDeltaEvent
+        """
+        stub_response = Response(
+            id="",
+            created_at=0.0,
+            model="",
+            object="response",
+            output=[],
+            parallel_tool_calls=False,
+            tool_choice="none",
+            tools=[],
+        )
+
+        match event.type:
+            case "message_start":
+                openai_event = ResponseCreatedEvent(
+                    sequence_number=sequence_number,
+                    type="response.created",
+                    response=stub_response,
+                )
+                return openai_event
+            case "content_block_delta" if isinstance(event, RawContentBlockDeltaEvent) and isinstance(
+                event.delta, ThinkingDelta
+            ):
+                return ResponseReasoningSummaryTextDeltaEvent(
+                    delta=event.delta.thinking,
+                    item_id="",
+                    output_index=0,
+                    sequence_number=sequence_number,
+                    summary_index=0,
+                    type="response.reasoning_summary_text.delta",
+                )
+            case "content_block_delta" if isinstance(event, RawContentBlockDeltaEvent) and isinstance(
+                event.delta, InputJSONDelta
+            ):
+                return ResponseFunctionCallArgumentsDeltaEvent(
+                    delta=event.delta.partial_json,
+                    item_id="",
+                    output_index=0,
+                    sequence_number=sequence_number,
+                    type="response.function_call_arguments.delta",
+                )
+            case "content_block_delta" if isinstance(event, RawContentBlockDeltaEvent) and isinstance(
+                event.delta, TextDelta
+            ):
+                return ResponseTextDeltaEvent(
+                    content_index=0,
+                    delta=event.delta.text,
+                    item_id="",
+                    logprobs=[],
+                    output_index=0,
+                    sequence_number=sequence_number,
+                    type="response.output_text.delta",
+                )
+            case "content_block_start" if isinstance(event, RawContentBlockStartEvent) and isinstance(
+                event.content_block, ThinkingBlock
+            ):
+                return ResponseOutputItemAddedEvent(
+                    item=ResponseReasoningItem(
+                        id="",
+                        summary=[],
+                        type="reasoning",
+                        status="in_progress",
+                    ),
+                    output_index=0,
+                    sequence_number=sequence_number,
+                    type="response.output_item.added",
+                )
+            case "content_block_start" if (
+                isinstance(event, RawContentBlockStartEvent)
+                and isinstance(event.content_block, ServerToolUseBlock)
+                and event.content_block.name == "web_search"
+            ):
+                return ResponseOutputItemAddedEvent(
+                    item=ResponseFunctionWebSearch(
+                        id="",
+                        action=ActionSearch(query="", type="search"),
+                        status="in_progress",
+                        type="web_search_call",
+                    ),
+                    output_index=0,
+                    sequence_number=sequence_number,
+                    type="response.output_item.added",
+                )
+            case "content_block_start" if isinstance(event, RawContentBlockStartEvent) and isinstance(
+                event.content_block, TextBlock
+            ):
+                return ResponseOutputItemAddedEvent(
+                    item=ResponseOutputMessage(
+                        id="",
+                        content=[],
+                        role="assistant",
+                        status="in_progress",
+                        type="message",
+                    ),
+                    output_index=0,
+                    sequence_number=sequence_number,
+                    type="response.output_item.added",
+                )
+            case "content_block_start" if isinstance(event, RawContentBlockStartEvent) and isinstance(
+                event.content_block, WebSearchToolResultBlock
+            ):
+                content = event.content_block.content
+                if isinstance(content, WebSearchToolResultError):
+                    return None
+                # query is recovered downstream from the preceding InputJSONDelta events.
+                return ResponseOutputItemDoneEvent(
+                    item=ResponseFunctionWebSearch(
+                        id="",
+                        action=ActionSearch(
+                            query="",
+                            type="search",
+                            sources=[ActionSearchSource(type="url", url=result.url) for result in content],
+                        ),
+                        status="completed",
+                        type="web_search_call",
+                    ),
+                    output_index=0,
+                    sequence_number=sequence_number,
+                    type="response.output_item.done",
+                )

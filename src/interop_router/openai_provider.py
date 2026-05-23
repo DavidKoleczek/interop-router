@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 import json
 import time
 from typing import Any, ClassVar, Literal, cast
@@ -17,6 +17,7 @@ from openai.types.responses import (
     ResponseInputImageContentParam,
     ResponseInputItemParam,
     ResponseOutputItem,
+    ResponseStreamEvent,
     ResponseTextConfigParam,
     response_create_params,
 )
@@ -30,6 +31,7 @@ from interop_router.types import (
     ContextLimitExceededError,
     ProviderName,
     RouterResponse,
+    RouterStream,
     SupportedModelOpenAI,
 )
 
@@ -125,6 +127,84 @@ class OpenAIProvider:
             usage=response.usage,
             duration_seconds=duration_seconds,
         )
+
+    @staticmethod
+    async def create_stream(
+        *,
+        client: AsyncOpenAI,
+        input: list[ChatMessage],
+        model: SupportedModelOpenAI,
+        include: list[ResponseIncludable] | None = None,
+        instructions: str | None = None,
+        max_output_tokens: int | None = None,
+        parallel_tool_calls: bool | None = None,
+        reasoning: Reasoning | None = None,
+        temperature: float | None = None,
+        text: ResponseTextConfigParam | None = None,
+        tool_choice: response_create_params.ToolChoice | None = None,
+        tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
+        truncation: Literal["auto", "disabled"] | None = None,
+    ) -> RouterStream:
+        input_messages = OpenAIProvider._prepare_input_messages(input)
+        start_time = time.perf_counter()
+        try:
+            sdk_stream = await client.responses.create(
+                model=model,
+                input=input_messages,
+                include=include if include is not None else omit,
+                instructions=instructions if instructions is not None else omit,
+                max_output_tokens=max_output_tokens if max_output_tokens is not None else omit,
+                parallel_tool_calls=parallel_tool_calls if parallel_tool_calls is not None else omit,
+                reasoning=reasoning if reasoning is not None else omit,
+                temperature=temperature if temperature is not None else omit,
+                text=text if text is not None else omit,
+                tool_choice=tool_choice if tool_choice is not None else omit,
+                tools=tools if tools is not None else omit,
+                top_logprobs=top_logprobs if top_logprobs is not None else omit,
+                top_p=top_p if top_p is not None else omit,
+                truncation=truncation if truncation is not None else omit,
+                store=False,
+                stream=True,
+            )
+        except openai.BadRequestError as e:
+            if e.code == "context_length_exceeded":
+                raise ContextLimitExceededError(str(e), provider="openai", cause=e) from e
+            raise
+
+        async def _stream() -> AsyncIterator[ResponseStreamEvent | RouterResponse]:
+            final_response: Response | None = None
+            duration_seconds: float | None = None
+            try:
+                async for event in sdk_stream:
+                    if isinstance(event, ResponseCompletedEvent):
+                        final_response = event.response
+                        duration_seconds = time.perf_counter() - start_time
+                        yield event
+                        break
+                    yield event
+            except openai.BadRequestError as e:
+                if e.code == "context_length_exceeded":
+                    raise ContextLimitExceededError(str(e), provider="openai", cause=e) from e
+                raise
+            finally:
+                await sdk_stream.close()
+
+            if final_response is None or duration_seconds is None:
+                raise RuntimeError("Response stream ended without a completed response event.")
+            converted_output = OpenAIProvider._convert_to_chat_messages(final_response.output)
+            if converted_output:
+                converted_output[-1].original_response = final_response.model_dump(mode="json")
+            yield RouterResponse(
+                output=converted_output,
+                error=final_response.error,
+                incomplete_details=final_response.incomplete_details,
+                usage=final_response.usage,
+                duration_seconds=duration_seconds,
+            )
+
+        return _stream()
 
     @staticmethod
     async def count_tokens(

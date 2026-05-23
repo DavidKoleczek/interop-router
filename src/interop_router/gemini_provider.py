@@ -1,5 +1,5 @@
 import base64
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 import json
 import time
 from typing import Any, ClassVar, Literal, cast
@@ -15,18 +15,28 @@ from openai.types.responses import (
     ResponseInputImageContentParam,
     ResponseInputItemParam,
     ResponseOutputTextParam,
+    ResponseStreamEvent,
     ResponseTextConfigParam,
     ResponseUsage,
     ToolParam,
     response_create_params,
 )
+from openai.types.responses.response_function_call_arguments_delta_event import ResponseFunctionCallArgumentsDeltaEvent
 from openai.types.responses.response_input_item_param import FunctionCallOutput
 from openai.types.responses.response_output_message_param import ResponseOutputMessageParam
 from openai.types.responses.response_reasoning_item_param import ResponseReasoningItemParam, Summary
+from openai.types.responses.response_reasoning_summary_text_delta_event import ResponseReasoningSummaryTextDeltaEvent
+from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
 from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 from openai.types.shared_params.reasoning import Reasoning
 
-from interop_router.types import ChatMessage, ContextLimitExceededError, RouterResponse, SupportedModelGemini
+from interop_router.types import (
+    ChatMessage,
+    ContextLimitExceededError,
+    RouterResponse,
+    RouterStream,
+    SupportedModelGemini,
+)
 
 
 class GeminiProvider:
@@ -88,6 +98,99 @@ class GeminiProvider:
         interop_response = GeminiProvider._convert_response(response)
         interop_response.duration_seconds = duration_seconds
         return interop_response
+
+    @staticmethod
+    async def create_stream(
+        *,
+        client: genai.Client,
+        input: list[ChatMessage],
+        model: SupportedModelGemini,
+        include: list[ResponseIncludable] | None = None,
+        instructions: str | None = None,
+        max_output_tokens: int | None = None,
+        parallel_tool_calls: bool | None = None,
+        reasoning: Reasoning | None = None,
+        temperature: float | None = None,
+        text: ResponseTextConfigParam | None = None,
+        tool_choice: response_create_params.ToolChoice | None = None,
+        tools: Iterable[ToolParam] | None = None,
+        top_logprobs: int | None = None,
+        top_p: float | None = None,
+        truncation: Literal["auto", "disabled"] | None = None,
+    ) -> RouterStream:
+        preprocessed_input, system_instruction = GeminiProvider._preprocess_input(input)
+        gemini_messages = GeminiProvider._convert_input_messages(preprocessed_input)
+        combined_instructions = "\n".join(filter(None, [system_instruction, instructions]))
+
+        gemini_kwargs = input[-1].provider_kwargs.get("gemini", {}) if input else {}
+        gemini_config, effective_model = GeminiProvider._create_config(
+            model=model,
+            system_instruction=combined_instructions,
+            include=include,
+            max_output_tokens=max_output_tokens,
+            reasoning=reasoning,
+            temperature=temperature,
+            tools=tools,
+            tool_choice=tool_choice,
+            gemini_kwargs=gemini_kwargs,
+        )
+
+        start_time = time.perf_counter()
+        try:
+            sdk_stream = await client.aio.models.generate_content_stream(
+                model=effective_model,
+                contents=gemini_messages,
+                config=gemini_config,
+            )
+        except genai_errors.ClientError as e:
+            if "input_token" in str(e).lower():
+                raise ContextLimitExceededError(str(e), provider="gemini", cause=e) from e
+            raise
+
+        async def _stream() -> AsyncIterator[ResponseStreamEvent | RouterResponse]:
+            # The Gemini SDK does not expose an assembled final response.
+            # We accumulate parts/usage/grounding across chunks and synthesize a `GenerateContentResponse` to reuse `_convert_response`.
+            accumulated_parts: list[types.Part] = []
+            last_usage_metadata: GenerateContentResponseUsageMetadata | None = None
+            last_grounding_metadata: types.GroundingMetadata | None = None
+            duration_seconds: float | None = None
+            try:
+                sequence_number = 0
+                async for chunk in sdk_stream:
+                    events = GeminiProvider._convert_stream_event(chunk, sequence_number)
+                    for event in events:
+                        yield event
+                    sequence_number += len(events)
+
+                    if chunk.candidates:
+                        candidate = chunk.candidates[0]
+                        if candidate.content and candidate.content.parts:
+                            accumulated_parts.extend(candidate.content.parts)
+                        if candidate.grounding_metadata:
+                            last_grounding_metadata = candidate.grounding_metadata
+                    if chunk.usage_metadata:
+                        last_usage_metadata = chunk.usage_metadata
+            except genai_errors.ClientError as e:
+                if "input_token" in str(e).lower():
+                    raise ContextLimitExceededError(str(e), provider="gemini", cause=e) from e
+                raise
+
+            duration_seconds = time.perf_counter() - start_time
+
+            final_response = GenerateContentResponse(
+                candidates=[
+                    types.Candidate(
+                        content=Content(parts=accumulated_parts, role="model"),
+                        grounding_metadata=last_grounding_metadata,
+                    )
+                ],
+                usage_metadata=last_usage_metadata,
+            )
+            interop_response = GeminiProvider._convert_response(final_response)
+            interop_response.duration_seconds = duration_seconds
+            yield interop_response
+
+        return _stream()
 
     @staticmethod
     async def count_tokens(
@@ -622,3 +725,60 @@ class GeminiProvider:
         )
 
     # endregion
+
+    @staticmethod
+    def _convert_stream_event(chunk: GenerateContentResponse, sequence_number: int) -> list[ResponseStreamEvent]:
+        """
+        These are the important Gemini events to convert. Notably the Gemini streaming API uses the same types as the non-streaming API just with partial content.
+        Mapped as (Gemini Type) -> (OpenAI/Interop Event/Type)
+        RawContentBlockDeltaEvent:
+          - Iterate over Candidates, content, parts where thought=True -> ResponseReasoningSummaryTextDeltaEvent
+          - Iterate over Candidates, content, parts where its just text -> ResponseTextDeltaEvent
+          - Iterate over Candidates, content, parts where the part has a FunctionCall -> ResponseFunctionCallArgumentsDeltaEvent
+        """
+        events: list[ResponseStreamEvent] = []
+        if not chunk.candidates:
+            return events
+        candidate = chunk.candidates[0]
+        if not candidate.content or not candidate.content.parts:
+            return events
+
+        for part in candidate.content.parts:
+            if part.thought and part.text:
+                events.append(
+                    ResponseReasoningSummaryTextDeltaEvent(
+                        delta=part.text,
+                        item_id="",
+                        output_index=0,
+                        sequence_number=sequence_number,
+                        summary_index=0,
+                        type="response.reasoning_summary_text.delta",
+                    )
+                )
+                sequence_number += 1
+            elif part.text and not part.thought:
+                events.append(
+                    ResponseTextDeltaEvent(
+                        content_index=0,
+                        delta=part.text,
+                        item_id="",
+                        logprobs=[],
+                        output_index=0,
+                        sequence_number=sequence_number,
+                        type="response.output_text.delta",
+                    )
+                )
+                sequence_number += 1
+            elif part.function_call:
+                events.append(
+                    ResponseFunctionCallArgumentsDeltaEvent(
+                        delta=json.dumps(part.function_call.args or {}),
+                        item_id="",
+                        output_index=0,
+                        sequence_number=sequence_number,
+                        type="response.function_call_arguments.delta",
+                    )
+                )
+                sequence_number += 1
+
+        return events

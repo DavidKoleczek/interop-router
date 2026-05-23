@@ -65,7 +65,6 @@ token_count = await router.count_tokens(input=messages, model="claude-sonnet-4-5
 
 The only goal of InteropRouter is to interoperate between the most common AI providers. To make this goal achievable, we make several trade-offs:
 - Only support OpenAI (including Azure OpenAI), Gemini, and Anthropic. Each provider adds a significant amount of possible permutations of features. To maintain high-quality interoperability, we limit the number of providers.
-- Only support async APIs, but not streaming token by token as this adds significant complexity, and for agents the latency is not as important.
 - We do not support stateful features where possible. These features are contradictory to the goal of seamless swapping between providers.
 - We choose the OpenAI Responses API types as the common denominator for creating pivots between providers. The reason is two-fold: a) The Responses API supports most features b) By picking an existing API, we avoid the need to design and maintain our own schema and Responses API support is gained for "free".
 - The supported features will be rigorously tested to ensure seamless swapping between providers within a single conversation.
