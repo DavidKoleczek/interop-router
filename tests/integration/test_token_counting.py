@@ -72,9 +72,9 @@ FUNCTION_TOOLS: list[FunctionToolParam] = [
 ]
 
 TOKEN_COUNT_PROVIDER_MODEL_PARAMS = [
-    pytest.param("openai", "gpt-5.4"),
+    pytest.param("openai", "gpt-5.6-terra"),
     pytest.param("gemini", "gemini-3.1-flash-lite-preview"),
-    pytest.param("anthropic", "claude-sonnet-4-6"),
+    pytest.param("anthropic", "claude-sonnet-5"),
 ]
 
 

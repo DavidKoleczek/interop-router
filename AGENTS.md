@@ -21,7 +21,7 @@
 
 # Dependency Context
 - For libraries that are new or change frequently you must use the source code of libraries or their documentation as your source of truth for how to use them.
-- There is a select set of repos cloned that constitute the dependencies for this project at `ai_working`. You must explore it directly when needed. It can be updated through the command `/setup-reference-repos`  in this project.
+- There is a select set of repos cloned that constitute the dependencies for this project at `ai_working`. You must explore it directly when needed. It is updated in the `.claude\skills\dependency-update`  skill in this project.
   - `openai-python`
   - `anthropic-sdk-python`
   - `python-genai` - Google Gen AI SDK

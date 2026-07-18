@@ -17,7 +17,7 @@ Cached tokens are reported in `response.usage.input_tokens_details.cached_tokens
 ```python
 response = await router.create(
     input=messages,
-    model="claude-sonnet-4-6",
+    model="claude-sonnet-5",
     provider_kwargs={"cache_control": {"type": "ephemeral"}},
 )
 ```

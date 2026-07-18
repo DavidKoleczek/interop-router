@@ -111,7 +111,7 @@ class OpenAIProvider:
                         break
                 if response is None:
                     raise RuntimeError("Response stream ended without a completed response event.")
-        except openai.BadRequestError as e:
+        except openai.APIError as e:
             if e.code == "context_length_exceeded":
                 raise ContextLimitExceededError(str(e), provider="openai", cause=e) from e
             raise
@@ -168,7 +168,7 @@ class OpenAIProvider:
                 store=False,
                 stream=True,
             )
-        except openai.BadRequestError as e:
+        except openai.APIError as e:
             if e.code == "context_length_exceeded":
                 raise ContextLimitExceededError(str(e), provider="openai", cause=e) from e
             raise
@@ -184,7 +184,7 @@ class OpenAIProvider:
                         yield event
                         break
                     yield event
-            except openai.BadRequestError as e:
+            except openai.APIError as e:
                 if e.code == "context_length_exceeded":
                     raise ContextLimitExceededError(str(e), provider="openai", cause=e) from e
                 raise
@@ -296,7 +296,6 @@ class OpenAIProvider:
                 case "image_generation_call":
                     chat_messages.extend(OpenAIProvider._convert_image_generation_call(output_item))
                 case "web_search_call":
-                    output_item = cast(ResponseFunctionWebSearch, output_item)
                     chat_messages.extend(OpenAIProvider._convert_web_search_call(output_item))
                 case _:
                     raise ValueError(f"Currently unsupported output item type: {output_item.type}")

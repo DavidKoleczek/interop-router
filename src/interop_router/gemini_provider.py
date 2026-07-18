@@ -90,7 +90,7 @@ class GeminiProvider:
                 config=gemini_config,
             )
         except genai_errors.ClientError as e:
-            if "input_token" in str(e).lower():
+            if GeminiProvider._is_context_limit_error(e):
                 raise ContextLimitExceededError(str(e), provider="gemini", cause=e) from e
             raise
         duration_seconds = time.perf_counter() - start_time
@@ -143,7 +143,7 @@ class GeminiProvider:
                 config=gemini_config,
             )
         except genai_errors.ClientError as e:
-            if "input_token" in str(e).lower():
+            if GeminiProvider._is_context_limit_error(e):
                 raise ContextLimitExceededError(str(e), provider="gemini", cause=e) from e
             raise
 
@@ -171,7 +171,7 @@ class GeminiProvider:
                     if chunk.usage_metadata:
                         last_usage_metadata = chunk.usage_metadata
             except genai_errors.ClientError as e:
-                if "input_token" in str(e).lower():
+                if GeminiProvider._is_context_limit_error(e):
                     raise ContextLimitExceededError(str(e), provider="gemini", cause=e) from e
                 raise
 
@@ -191,6 +191,13 @@ class GeminiProvider:
             yield interop_response
 
         return _stream()
+
+    @staticmethod
+    def _is_context_limit_error(error: genai_errors.ClientError) -> bool:
+        error_text = str(error).lower().replace("_", " ")
+        return "input token" in error_text and any(
+            indicator in error_text for indicator in ("exceed", "limit", "maximum")
+        )
 
     @staticmethod
     async def count_tokens(
@@ -720,7 +727,7 @@ class GeminiProvider:
             input_tokens=usage_metadata.prompt_token_count or 0,
             output_tokens=usage_metadata.candidates_token_count or 0,
             total_tokens=usage_metadata.total_token_count or 0,
-            input_tokens_details=InputTokensDetails(cached_tokens=-1),
+            input_tokens_details=InputTokensDetails(cached_tokens=-1, cache_write_tokens=-1),
             output_tokens_details=OutputTokensDetails(reasoning_tokens=-1),
         )
 

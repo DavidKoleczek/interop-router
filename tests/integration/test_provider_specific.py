@@ -1,10 +1,13 @@
 import os
+from typing import cast
 
 from anthropic import AsyncAnthropic
 from google import genai
 from openai import AsyncOpenAI
 from openai.types.responses import EasyInputMessageParam, ResponseTextConfigParam
+from openai.types.responses.response_reasoning_item_param import ResponseReasoningItemParam
 from openai.types.responses.tool_param import ImageGeneration
+from openai.types.shared_params.reasoning import Reasoning
 import pytest
 
 from interop_router.router import Router
@@ -22,12 +25,12 @@ def router() -> Router:
 
 # region: Anthropic models
 
-ANTHROPIC_MODELS: list[SupportedModelAnthropic] = ["claude-opus-4-6", "claude-sonnet-4-6"]
+ANTHROPIC_MODELS: list[SupportedModelAnthropic] = ["claude-opus-4-8", "claude-sonnet-5"]
 
 
 @pytest.mark.parametrize("model", ANTHROPIC_MODELS)
-async def test_adaptive_thinking_medium(router: Router, model: SupportedModelAnthropic) -> None:
-    """Adaptive thinking with medium effort."""
+async def test_adaptive_thinking_summary(router: Router, model: SupportedModelAnthropic) -> None:
+    """Requesting a reasoning summary returns non-empty summary text."""
     messages = [
         ChatMessage(message=EasyInputMessageParam(role="user", content="What is 27 * 43? Think step by step.")),
     ]
@@ -41,6 +44,13 @@ async def test_adaptive_thinking_medium(router: Router, model: SupportedModelAnt
 
     assert response is not None
     assert response.output
+    reasoning_items = [
+        cast(ResponseReasoningItemParam, output.message)
+        for output in response.output
+        if output.message.get("type") == "reasoning"
+    ]
+    assert reasoning_items
+    assert any(summary["text"].strip() for reasoning_item in reasoning_items for summary in reasoning_item["summary"])
 
 
 @pytest.mark.parametrize("model", ANTHROPIC_MODELS)
@@ -99,12 +109,34 @@ async def test_no_reasoning(router: Router, model: SupportedModelAnthropic) -> N
     assert response.output
 
 
+async def test_mid_conversation_system_messages(router: Router) -> None:
+    """Opus 4.8 accepts system-level instructions throughout a conversation."""
+    messages = [
+        ChatMessage(message=EasyInputMessageParam(role="system", content="You are a helpful geography assistant.")),
+        ChatMessage(message=EasyInputMessageParam(role="user", content="We will discuss European geography.")),
+        ChatMessage(message=EasyInputMessageParam(role="system", content="Keep all later answers concise.")),
+        ChatMessage(message=EasyInputMessageParam(role="assistant", content="Understood.")),
+        ChatMessage(message=EasyInputMessageParam(role="user", content="Treat country names as case-insensitive.")),
+        ChatMessage(message=EasyInputMessageParam(role="developer", content="Use conventional English place names.")),
+        ChatMessage(message=EasyInputMessageParam(role="assistant", content="Understood.")),
+        ChatMessage(message=EasyInputMessageParam(role="user", content="What is the capital of France?")),
+        ChatMessage(message=EasyInputMessageParam(role="system", content="Answer in one short sentence.")),
+    ]
+
+    response = await router.create(
+        model="claude-opus-4-8",
+        input=messages,
+    )
+
+    assert response.output
+
+
 async def test_prompt_caching(router: Router) -> None:
     """Automatic prompt caching via provider_kwargs produces cache read tokens on the second turn."""
     cache_control = {"cache_control": {"type": "ephemeral"}}
-    model: SupportedModelAnthropic = "claude-sonnet-4-6"
+    model: SupportedModelAnthropic = "claude-sonnet-5"
 
-    # Minimum cacheable length for Sonnet 4.6 is 2048 tokens; use a long system prompt to exceed it.
+    # Use a long system prompt to exceed the minimum cacheable length.
     padding = "word " * 2200
     messages = [
         ChatMessage(
@@ -165,7 +197,7 @@ async def test_image_gen_with_thinking(router: Router) -> None:
 
 # region: OpenAI models
 
-OPENAI_MODELS: list[SupportedModelOpenAI] = ["gpt-5.4"]
+OPENAI_MODELS: list[SupportedModelOpenAI] = ["gpt-5.6-terra"]
 
 
 @pytest.mark.parametrize("model", OPENAI_MODELS)
@@ -203,6 +235,72 @@ async def test_sampling_params_with_no_reasoning(router: Router, model: Supporte
     )
 
     assert response is not None
+    assert response.output
+
+
+@pytest.mark.parametrize("model", OPENAI_MODELS)
+async def test_preserve_reasoning(router: Router, model: SupportedModelOpenAI) -> None:
+    """Test the preserve reasoning feature where the model can persist reasoning across multiple turns with reasoning={"context": "all_turns"} set."""
+    messages = [
+        ChatMessage(
+            message=EasyInputMessageParam(
+                role="user",
+                content=(
+                    "A store discounts a $240 item by 15%, then applies 8% sales tax. "
+                    "Calculate the final price and briefly explain your reasoning."
+                ),
+            )
+        ),
+    ]
+    reasoning: Reasoning = {"context": "all_turns", "effort": "high"}
+
+    response1 = await router.create(
+        model=model,
+        input=messages,
+        reasoning=reasoning,
+        include=["reasoning.encrypted_content"],
+    )
+
+    assert response1.output
+
+    messages.extend(response1.output)
+    messages.append(
+        ChatMessage(
+            message=EasyInputMessageParam(
+                role="user",
+                content="Now calculate the final price if the discount were 25% instead, using the same method.",
+            )
+        )
+    )
+
+    response2 = await router.create(
+        model=model,
+        input=messages,
+        reasoning=reasoning,
+        include=["reasoning.encrypted_content"],
+    )
+
+    assert response2.output
+
+
+@pytest.mark.parametrize("model", OPENAI_MODELS)
+async def test_pro_reasoning(router: Router, model: SupportedModelOpenAI) -> None:
+    """Pro reasoning mode produces a response."""
+    messages = [
+        ChatMessage(
+            message=EasyInputMessageParam(
+                role="user",
+                content=("Write a haiku about bears that rhymes."),
+            )
+        ),
+    ]
+
+    response = await router.create(
+        model=model,
+        input=messages,
+        reasoning={"mode": "pro", "effort": "medium"},
+    )
+
     assert response.output
 
 

@@ -25,7 +25,7 @@ Update `SupportedModelOpenAI`, `SupportedModelGemini`, and `SupportedModelAnthro
 3. Anthropic instructions
    - Read the Anthropic models from `ai_working/anthropic-sdk-python/src/anthropic/types/model_param.py` - the `ModelParam` Union (excluding `str`)
    - Update the `SupportedModelAnthropic` type alias in `src/interop_router/types.py`, based on these rules.
-     - Any newer models. For example, if claude-sonnet-4-5 is already in our supported models, but claude-sonnet-4-6 is in the Anthropic package, add claude-sonnet-4-6.
+     - Add newer models than those currently supported.
      - Do not add in older models.
 
 NOTE: We might have to add some models manually. These should be denoted with a comment and not overwritten.

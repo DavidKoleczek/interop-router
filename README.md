@@ -48,17 +48,17 @@ router.register("anthropic", AsyncAnthropic())
 # See https://platform.openai.com/docs/guides/migrate-to-responses and the library source for more details on typing.
 messages = [ChatMessage(message=EasyInputMessageParam(role="user", content="Hello!"))]
 
-response = await router.create(input=messages, model="gpt-5.2")
-response = await router.create(input=messages, model="gemini-3-flash-preview")
-response = await router.create(input=messages, model="claude-sonnet-4-5-20250929")
+response = await router.create(input=messages, model="gpt-5.6-terra")
+response = await router.create(input=messages, model="gemini-3.5-flash")
+response = await router.create(input=messages, model="claude-sonnet-5")
 ```
 
 Count input tokens before making a request using each provider's native token counting endpoint:
 
 ```python
-token_count = await router.count_tokens(input=messages, model="gpt-5.2")
-token_count = await router.count_tokens(input=messages, model="gemini-3-flash-preview")
-token_count = await router.count_tokens(input=messages, model="claude-sonnet-4-5-20250929")
+token_count = await router.count_tokens(input=messages, model="gpt-5.6-terra")
+token_count = await router.count_tokens(input=messages, model="gemini-3.5-flash")
+token_count = await router.count_tokens(input=messages, model="claude-sonnet-5")
 ```
 
 ### InteropRouter Design Philosophy

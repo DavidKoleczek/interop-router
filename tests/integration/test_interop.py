@@ -16,12 +16,12 @@ from interop_router.router import Router
 from interop_router.types import ChatMessage, SupportedModel
 
 INTEROP_PARAMS = [
-    pytest.param("gpt-5.4", "gemini-3.1-flash-lite-preview", id="openai-to-gemini"),
-    pytest.param("gemini-3.1-flash-lite-preview", "gpt-5.4", id="gemini-to-openai"),
-    pytest.param("gpt-5.4", "claude-sonnet-4-6", id="openai-to-anthropic"),
-    pytest.param("claude-sonnet-4-6", "gpt-5.4", id="anthropic-to-openai"),
-    pytest.param("gemini-3.1-flash-lite-preview", "claude-sonnet-4-6", id="gemini-to-anthropic"),
-    pytest.param("claude-sonnet-4-6", "gemini-3.1-flash-lite-preview", id="anthropic-to-gemini"),
+    pytest.param("gpt-5.6-terra", "gemini-3.5-flash", id="openai-to-gemini"),
+    pytest.param("gemini-3.5-flash", "gpt-5.6-terra", id="gemini-to-openai"),
+    pytest.param("gpt-5.6-terra", "claude-sonnet-5", id="openai-to-anthropic"),
+    pytest.param("claude-sonnet-5", "gpt-5.6-terra", id="anthropic-to-openai"),
+    pytest.param("gemini-3.5-flash", "claude-sonnet-5", id="gemini-to-anthropic"),
+    pytest.param("claude-sonnet-5", "gemini-3.5-flash", id="anthropic-to-gemini"),
 ]
 
 
@@ -338,11 +338,11 @@ async def test_function_calling_parallel_roundtrip(
 IMAGE_GEN_INTEROP_PARAMS = [
     pytest.param(
         ("gemini-3.1-flash-lite-preview", "gemini-3-pro-image-preview"),
-        ("gpt-5.4", "gpt-image-1.5"),
+        ("gpt-5.6-terra", "gpt-image-1.5"),
         id="gemini-image-to-openai",
     ),
     pytest.param(
-        ("gpt-5.4", "gpt-image-1.5"),
+        ("gpt-5.6-terra", "gpt-image-1.5"),
         ("gemini-3.1-flash-lite-preview", "gemini-3-pro-image-preview"),
         id="openai-to-gemini-image",
     ),

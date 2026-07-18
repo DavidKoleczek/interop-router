@@ -42,9 +42,9 @@ READ_IMAGE_TOOL = FunctionToolParam(
 )
 
 PROVIDER_MODEL_PARAMS = [
-    pytest.param("openai", "gpt-5.4"),
+    pytest.param("openai", "gpt-5.6-terra"),
     pytest.param("gemini", "gemini-3.1-flash-lite-preview"),
-    pytest.param("anthropic", "claude-sonnet-4-6"),
+    pytest.param("anthropic", "claude-sonnet-5"),
 ]
 
 
@@ -471,7 +471,7 @@ async def test_web_search(router: Router, provider: ProviderName, model: Support
         ChatMessage(
             message=EasyInputMessageParam(
                 role="user",
-                content="Can you find a list of 5 recent articles on AI advancements from 2025? Just list the links without a description.",
+                content="Can you find a list of 5 recent articles on AI advancements? Just list the links without a description.",
             )
         )
     ]
@@ -701,5 +701,5 @@ async def test_azure_openai_client():
     router.register("openai", client)
 
     message = ChatMessage(message=EasyInputMessageParam(role="user", content="Hello!"))
-    response = await router.create(input=[message], model="gpt-5-mini")
+    response = await router.create(input=[message], model="gpt-5.6-terra")
     assert response is not None

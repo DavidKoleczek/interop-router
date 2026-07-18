@@ -1,13 +1,13 @@
 repos:
   # uv lock file management
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.11.15
+    rev: 0.11.29
     hooks:
       - id: uv-lock
 
   # Ruff linting and formatting
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.13
+    rev: v0.15.21
     hooks:
       # Run the linter with --fix (must be before formatter)
       - id: ruff-check

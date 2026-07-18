@@ -113,7 +113,7 @@ class AnthropicProvider:
         background: bool | None = None,
         provider_kwargs: dict[str, Any] | None = None,
     ) -> RouterResponse:
-        preprocessed_input, system_instruction = AnthropicProvider._preprocess_input(input)
+        preprocessed_input, system_instruction = AnthropicProvider._preprocess_input(input, model)
         anthropic_messages = AnthropicProvider._convert_input_messages(preprocessed_input)
         config = AnthropicProvider._create_config(
             model, max_output_tokens, temperature, reasoning, tool_choice, tools, system_instruction, provider_kwargs
@@ -158,7 +158,7 @@ class AnthropicProvider:
         truncation: Literal["auto", "disabled"] | None = None,
         provider_kwargs: dict[str, Any] | None = None,
     ) -> RouterStream:
-        preprocessed_input, system_instruction = AnthropicProvider._preprocess_input(input)
+        preprocessed_input, system_instruction = AnthropicProvider._preprocess_input(input, model)
         anthropic_messages = AnthropicProvider._convert_input_messages(preprocessed_input)
         config = AnthropicProvider._create_config(
             model, max_output_tokens, temperature, reasoning, tool_choice, tools, system_instruction, provider_kwargs
@@ -216,7 +216,7 @@ class AnthropicProvider:
         reasoning: Reasoning | None = None,
         tools: Iterable[ToolParam] | None = None,
     ) -> int:
-        preprocessed_input, system_instruction = AnthropicProvider._preprocess_input(input)
+        preprocessed_input, system_instruction = AnthropicProvider._preprocess_input(input, model)
         anthropic_messages = AnthropicProvider._convert_input_messages(preprocessed_input)
         config = AnthropicProvider._create_config(
             model, reasoning=reasoning, tools=tools, system_instruction=system_instruction
@@ -235,12 +235,27 @@ class AnthropicProvider:
         return result.input_tokens
 
     @staticmethod
-    def _preprocess_input(input: list[ChatMessage]) -> tuple[list[ChatMessage], str]:
-        preprocessed_messages = []
+    def _preprocess_input(input: list[ChatMessage], model: SupportedModelAnthropic) -> tuple[list[ChatMessage], str]:
+        mid_conv_system_messages_models: list[SupportedModelAnthropic] = ["claude-opus-4-8"]
+
+        # Leading system messages must remain in the system field not in a system message.
+        leading_system_message_count = 0
+        if model in mid_conv_system_messages_models:
+            for message in input:
+                if message.message.get("role") not in ("system", "developer"):
+                    break
+                leading_system_message_count += 1
+
+        preprocessed_messages: list[ChatMessage] = []
         instructions = ""
-        for message in input:
+        for index, message in enumerate(input):
             input_message = message.message
-            if input_message.get("role", None) in ["system", "developer"]:
+            is_system_message = input_message.get("role") in ("system", "developer")
+            # Models without mid-conversation support keep hoisting all system-level messages.
+            should_hoist_system_message = (
+                model not in mid_conv_system_messages_models or index < leading_system_message_count
+            )
+            if is_system_message and should_hoist_system_message:
                 content = input_message.get("content", [])
                 if isinstance(content, str):
                     instructions += content + "\n"
@@ -271,6 +286,8 @@ class AnthropicProvider:
                         message_params.append(MessageParam(role="user", content=content))
                     elif role == "assistant":
                         message_params.append(MessageParam(role="assistant", content=content))
+                    elif role in ("system", "developer"):
+                        message_params.append(MessageParam(role="system", content=content))
                 elif isinstance(content, list):
                     content_items = []
                     for content_item in content:
@@ -288,6 +305,8 @@ class AnthropicProvider:
                         message_params.append(MessageParam(role="user", content=content_items))
                     elif role == "assistant":
                         message_params.append(MessageParam(role="assistant", content=content_items))
+                    elif role in ("system", "developer"):
+                        message_params.append(MessageParam(role="system", content=content_items))
 
             elif input_message.get("type") == "reasoning":
                 summaries = list(input_message.get("summary", []))
@@ -428,7 +447,13 @@ class AnthropicProvider:
         system_instruction: str = "",
         provider_kwargs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        is_adaptive = model in ("claude-opus-4-6", "claude-sonnet-4-6")
+        is_adaptive = model in (
+            "claude-opus-4-6",
+            "claude-opus-4-7",
+            "claude-opus-4-8",
+            "claude-sonnet-4-6",
+            "claude-sonnet-5",
+        )
 
         if max_output_tokens is None:
             max_output_tokens = 128_000 if is_adaptive else 64_000
@@ -440,14 +465,17 @@ class AnthropicProvider:
             reasoning_effort = reasoning.get("effort") or "none"
 
             if is_adaptive:
-                effort_map: dict[str, Literal["low", "medium", "high", "max"]] = {
+                effort_map: dict[str, Literal["low", "medium", "high", "xhigh", "max"]] = {
                     "low": "low",
                     "medium": "medium",
                     "high": "high",
-                    "xhigh": "max",
+                    "xhigh": "xhigh",
+                    "max": "max",
                 }
                 if reasoning_effort != "none":
                     thinking_config_param = ThinkingConfigAdaptiveParam(type="adaptive")
+                    if reasoning.get("summary") is not None:
+                        thinking_config_param["display"] = "summarized"
                     output_config = OutputConfigParam(effort=effort_map.get(reasoning_effort, "high"))
             else:
                 thinking_budget_tokens = 1024
@@ -462,6 +490,8 @@ class AnthropicProvider:
                         thinking_budget_tokens = 16_000
                     case "xhigh":
                         # 64k is the maximum, but this does not leave room for output tokens
+                        thinking_budget_tokens = 32_000
+                    case "max":
                         thinking_budget_tokens = 32_000
                 thinking_config_param = ThinkingConfigEnabledParam(budget_tokens=thinking_budget_tokens, type="enabled")
 
@@ -709,7 +739,10 @@ class AnthropicProvider:
         output_tokens = usage.output_tokens
         total_tokens = input_tokens + output_tokens
 
-        input_tokens_details = InputTokensDetails(cached_tokens=cache_read)
+        input_tokens_details = InputTokensDetails(
+            cached_tokens=cache_read,
+            cache_write_tokens=cache_creation,
+        )
         output_tokens_details = OutputTokensDetails(reasoning_tokens=0)
 
         return ResponseUsage(
