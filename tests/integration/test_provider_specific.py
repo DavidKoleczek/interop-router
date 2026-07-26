@@ -25,7 +25,7 @@ def router() -> Router:
 
 # region: Anthropic models
 
-ANTHROPIC_MODELS: list[SupportedModelAnthropic] = ["claude-opus-4-8", "claude-sonnet-5"]
+ANTHROPIC_MODELS: list[SupportedModelAnthropic] = ["claude-opus-5", "claude-sonnet-5"]
 
 
 @pytest.mark.parametrize("model", ANTHROPIC_MODELS)
@@ -110,7 +110,7 @@ async def test_no_reasoning(router: Router, model: SupportedModelAnthropic) -> N
 
 
 async def test_mid_conversation_system_messages(router: Router) -> None:
-    """Opus 4.8 accepts system-level instructions throughout a conversation."""
+    """Opus 4.8 and Opus 5 accept system-level instructions throughout a conversation."""
     messages = [
         ChatMessage(message=EasyInputMessageParam(role="system", content="You are a helpful geography assistant.")),
         ChatMessage(message=EasyInputMessageParam(role="user", content="We will discuss European geography.")),
@@ -124,7 +124,7 @@ async def test_mid_conversation_system_messages(router: Router) -> None:
     ]
 
     response = await router.create(
-        model="claude-opus-4-8",
+        model="claude-opus-5",
         input=messages,
     )
 

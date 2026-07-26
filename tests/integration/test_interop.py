@@ -16,12 +16,12 @@ from interop_router.router import Router
 from interop_router.types import ChatMessage, SupportedModel
 
 INTEROP_PARAMS = [
-    pytest.param("gpt-5.6-terra", "gemini-3.5-flash", id="openai-to-gemini"),
-    pytest.param("gemini-3.5-flash", "gpt-5.6-terra", id="gemini-to-openai"),
+    pytest.param("gpt-5.6-terra", "gemini-3.6-flash", id="openai-to-gemini"),
+    pytest.param("gemini-3.6-flash", "gpt-5.6-terra", id="gemini-to-openai"),
     pytest.param("gpt-5.6-terra", "claude-sonnet-5", id="openai-to-anthropic"),
     pytest.param("claude-sonnet-5", "gpt-5.6-terra", id="anthropic-to-openai"),
-    pytest.param("gemini-3.5-flash", "claude-sonnet-5", id="gemini-to-anthropic"),
-    pytest.param("claude-sonnet-5", "gemini-3.5-flash", id="anthropic-to-gemini"),
+    pytest.param("gemini-3.6-flash", "claude-sonnet-5", id="gemini-to-anthropic"),
+    pytest.param("claude-sonnet-5", "gemini-3.6-flash", id="anthropic-to-gemini"),
 ]
 
 

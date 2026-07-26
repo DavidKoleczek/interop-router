@@ -1,6 +1,6 @@
 [project]
 name = "interop-router"
-version = "0.3.0"
+version = "0.3.1"
 description = "Interoperate between AI providers using the OpenAI Responses API as a common interface."
 readme = "README.md"
 authors = [
@@ -8,28 +8,29 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "anthropic[aiohttp]>=0.116,<1.0",
-    "google-genai[aiohttp]>=2.11,<3.0",
-    "openai[aiohttp]>=2.45,<3.0",
+    "anthropic[aiohttp]>=0.120,<1.0",
+    "google-genai[aiohttp]>=2.14,<3.0",
+    "openai[aiohttp]>=2.47,<3.0",
     "pydantic>=2.13.4,<3.0",
 ]
 
 [build-system]
-requires = ["uv_build>=0.11.29,<0.12.0"]
+requires = ["uv_build>=0.11.31,<0.12.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
     "ipykernel>=7.3",
-    "nbclient>=0.11",
+    "nbclient>=0.11.0",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4",
-    "ruff>=0.15.21",
-    "ty>=0.0.59",
+    "ruff>=0.15.22",
+    "ty>=0.0.63",
 ]
 
 [tool.uv]
 exclude-newer = "3 days"
+exclude-newer-package = { anthropic = false }
 
 [tool.ruff]
 line-length = 120

@@ -95,7 +95,7 @@ FUNCTION_TOOLS: list[FunctionToolParam] = [
 PROVIDER_MODEL_PARAMS = [
     pytest.param("openai", "gpt-5.6-terra"),
     pytest.param("anthropic", "claude-sonnet-5"),
-    pytest.param("gemini", "gemini-3.5-flash"),
+    pytest.param("gemini", "gemini-3.6-flash"),
 ]
 
 

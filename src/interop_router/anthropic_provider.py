@@ -236,7 +236,7 @@ class AnthropicProvider:
 
     @staticmethod
     def _preprocess_input(input: list[ChatMessage], model: SupportedModelAnthropic) -> tuple[list[ChatMessage], str]:
-        mid_conv_system_messages_models: list[SupportedModelAnthropic] = ["claude-opus-4-8"]
+        mid_conv_system_messages_models: list[SupportedModelAnthropic] = ["claude-opus-4-8", "claude-opus-5"]
 
         # Leading system messages must remain in the system field not in a system message.
         leading_system_message_count = 0
@@ -453,6 +453,7 @@ class AnthropicProvider:
             "claude-opus-4-8",
             "claude-sonnet-4-6",
             "claude-sonnet-5",
+            "claude-opus-5",
         )
 
         if max_output_tokens is None:

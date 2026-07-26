@@ -49,7 +49,7 @@ router.register("anthropic", AsyncAnthropic())
 messages = [ChatMessage(message=EasyInputMessageParam(role="user", content="Hello!"))]
 
 response = await router.create(input=messages, model="gpt-5.6-terra")
-response = await router.create(input=messages, model="gemini-3.5-flash")
+response = await router.create(input=messages, model="gemini-3.6-flash")
 response = await router.create(input=messages, model="claude-sonnet-5")
 ```
 
@@ -57,7 +57,7 @@ Count input tokens before making a request using each provider's native token co
 
 ```python
 token_count = await router.count_tokens(input=messages, model="gpt-5.6-terra")
-token_count = await router.count_tokens(input=messages, model="gemini-3.5-flash")
+token_count = await router.count_tokens(input=messages, model="gemini-3.6-flash")
 token_count = await router.count_tokens(input=messages, model="claude-sonnet-5")
 ```
 

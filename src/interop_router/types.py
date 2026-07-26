@@ -64,6 +64,8 @@ SupportedModelOpenAI: TypeAlias = Literal[
 ]
 
 SupportedModelGemini: TypeAlias = Literal[
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
     "gemini-3.1-flash-lite",
     "gemini-3.1-flash-lite-preview",
@@ -73,6 +75,7 @@ SupportedModelGemini: TypeAlias = Literal[
 ]
 
 SupportedModelAnthropic: TypeAlias = Literal[
+    "claude-opus-5",
     "claude-sonnet-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
