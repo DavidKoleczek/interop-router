@@ -12,7 +12,7 @@
     <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
-InteropRouter is designed to seamlessly interoperate between the most common AI providers at a high level of quality. 
+InteropRouter is designed to seamlessly interoperate between the most common AI providers at a high level of quality.
 It uses the [OpenAI Responses API](https://platform.openai.com/docs/guides/migrate-to-responses) types as a common denominator for inputs and outputs, allowing you to switch between providers with minimal code changes.
 See [examples/](examples/) for detailed notebooks covering interoperability, function calling, image generation, and more.
 
@@ -43,14 +43,16 @@ router = Router()
 router.register("openai", AsyncOpenAI())
 router.register("gemini", genai.Client())
 router.register("anthropic", AsyncAnthropic())
+router.register("chat_completions", AsyncOpenAI(base_url="http://localhost:8000/v1"))  # Can point to local models, OpenAI, OpenRouter, etc.
 
-# InteropRouter is strictly typed, so be sure to use OpenAI's Response types for inputs. 
 # See https://platform.openai.com/docs/guides/migrate-to-responses and the library source for more details on typing.
 messages = [ChatMessage(message=EasyInputMessageParam(role="user", content="Hello!"))]
 
 response = await router.create(input=messages, model="gpt-5.6-terra")
 response = await router.create(input=messages, model="gemini-3.6-flash")
 response = await router.create(input=messages, model="claude-sonnet-5")
+# Explicit provider routing with provider/model.
+response = await router.create(input=messages, model="chat_completions/nvidia/Qwen3.6-27B-NVFP4")
 ```
 
 Count input tokens before making a request using each provider's native token counting endpoint:
@@ -64,7 +66,8 @@ token_count = await router.count_tokens(input=messages, model="claude-sonnet-5")
 ### InteropRouter Design Philosophy
 
 The only goal of InteropRouter is to interoperate between the most common AI providers. To make this goal achievable, we make several trade-offs:
-- Only support OpenAI (including Azure OpenAI), Gemini, and Anthropic. Each provider adds a significant amount of possible permutations of features. To maintain high-quality interoperability, we limit the number of providers.
+- Focus on OpenAI (Responses API, including Azure OpenAI), Gemini, and Anthropic. Each provider adds a significant amount of possible permutations of features. To maintain high-quality interoperability, we limit the number of first-class providers.
+- Also support a `chat_completions` adapter for OpenAI-compatible Chat Completions endpoints.
 - We do not support stateful features where possible. These features are contradictory to the goal of seamless swapping between providers.
 - We choose the OpenAI Responses API types as the common denominator for creating pivots between providers. The reason is two-fold: a) The Responses API supports most features b) By picking an existing API, we avoid the need to design and maintain our own schema and Responses API support is gained for "free".
 - The supported features will be rigorously tested to ensure seamless swapping between providers within a single conversation.
@@ -105,8 +108,8 @@ uv run ruff format && uv run ruff check --fix && uv run ty check && uv run pytes
 
 ### Further Information
 
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
-
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+- [docs/PROVIDER_GUIDE.md](docs/PROVIDER_GUIDE.md)
 
 ## Compatibility and Roadmap
 

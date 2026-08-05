@@ -4,23 +4,26 @@
 
 This describes the current features from each provider that InteropRouter supports or does not support. This list is not exhaustive. No means not currently planned.
 
-For a list of supported models, see `SupportedModel` in [types.py](../src/interop_router/types.py)
+For a list of models that can be used as bare ids (without a provider prefix), see `SupportedModel` in [types.py](../src/interop_router/types.py).
+You can also pass `provider/model` (for example `openai/gpt-5.6-terra`) to select a provider explicitly.
+`chat_completions` has no bare-id catalog; always use `chat_completions/<api_model_id>` (the id after the first `/` may itself contain `/`).
 
-| Feature | OpenAI | Gemini | Anthropic |
-|---------|--------|--------|-----------|
-| Reasoning* | Yes | Yes | Yes |
-| Image Understanding | Yes | Yes | Yes |
-| Tool Calling with Reasoning | Yes | Yes | Yes |
-| Built-in Web Search and Web Fetch| Yes | Yes | Yes |
-| Image Generation Tool | Yes (gpt-image variants) | Yes (Nano Banana variants) | No, Anthropic does not have an image generation model |
-| Structured Outputs | Planned | Planned | Planned |
-| Citations | Planned | Planned | Planned |
-| Other Built-in Tools (Code execution, file search, etc) | TBD | TBD | TBD |
-| Audio Model Support | No | No | N/A |
-| Video Generation Model Support | No | No | N/A |
-| Streaming Support | Yes | Yes | Yes |
+| Feature | OpenAI | Gemini | Anthropic | Chat Completions |
+|---------|--------|--------|-----------|------------------|
+| Reasoning* | Yes | Yes | Yes | Partial (`reasoning.effort` only; endpoint-dependent) |
+| Image Understanding | Yes | Yes | Yes | Yes |
+| Tool Calling with Reasoning | Yes | Yes | Yes | Function tools only |
+| Built-in Web Search and Web Fetch| Yes | Yes | Yes | No (hosted tools are skipped) |
+| Image Generation Tool | Yes (gpt-image variants) | Yes (Nano Banana variants) | No, Anthropic does not have an image generation model | No |
+| Structured Outputs | Planned | Planned | Planned | No |
+| Citations | Planned | Planned | Planned | No |
+| Other Built-in Tools (Code execution, file search, etc) | TBD | TBD | TBD | No |
+| Audio Model Support | No | No | N/A | No |
+| Video Generation Model Support | No | No | N/A | No |
+| Streaming Support | Yes | Yes | Yes | Yes |
+| Token Counting | Yes | Yes | Yes | No |
 
-* All providers encrypt or do not allow reasoning to be modified. As such InteropRouter cannot and does not use any non-native reasoning content when switching providers.
+* First-class providers encrypt or do not allow reasoning to be modified. As such InteropRouter cannot and does not use any non-native reasoning content when switching providers. The `chat_completions` adapter drops prior-turn reasoning items when converting history.
 
 
 ## Known Issues

@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from typing import Any, Literal, cast, get_args, overload
+from typing import Any, Literal, get_args, overload
 
 from anthropic import AsyncAnthropic
 from google import genai
@@ -9,18 +9,59 @@ from openai.types.responses.tool_param import ToolParam
 from openai.types.shared_params.reasoning import Reasoning
 
 from interop_router.anthropic_provider import AnthropicProvider
+from interop_router.chat_completions_provider import ChatCompletionsProvider
 from interop_router.gemini_provider import GeminiProvider
 from interop_router.openai_provider import OpenAIProvider
 from interop_router.types import (
     ChatMessage,
+    ModelRef,
     ProviderName,
     RouterResponse,
     RouterStream,
-    SupportedModel,
     SupportedModelAnthropic,
     SupportedModelGemini,
     SupportedModelOpenAI,
 )
+
+_PROVIDER_NAMES: frozenset[str] = frozenset(get_args(ProviderName))
+_PROVIDER_BY_PREFIX: dict[str, ProviderName] = {
+    "openai": "openai",
+    "gemini": "gemini",
+    "anthropic": "anthropic",
+    "chat_completions": "chat_completions",
+}
+_OPENAI_MODELS: frozenset[str] = frozenset(get_args(SupportedModelOpenAI))
+_GEMINI_MODELS: frozenset[str] = frozenset(get_args(SupportedModelGemini))
+_ANTHROPIC_MODELS: frozenset[str] = frozenset(get_args(SupportedModelAnthropic))
+
+
+def resolve_model(model: ModelRef) -> tuple[ProviderName, str]:
+    """Resolve a model reference to a provider and API model id.
+
+    Prefixed forms use only the first ``/`` for disambiguation.
+    When the segment before it is a known provider name, that selects the provider and the remainder
+    (which may itself contain ``/``) is the API model id.
+    Otherwise the full string is looked up in the supported-model catalogs.
+    """
+    if "/" in model:
+        prefix, api_model = model.split("/", 1)
+        provider = _PROVIDER_BY_PREFIX.get(prefix)
+        if provider is not None:
+            if not api_model:
+                raise ValueError(f"Empty model id in model reference: {model!r}")
+            return provider, api_model
+
+    if model in _OPENAI_MODELS:
+        return "openai", model
+    if model in _GEMINI_MODELS:
+        return "gemini", model
+    if model in _ANTHROPIC_MODELS:
+        return "anthropic", model
+
+    raise ValueError(
+        f"Unknown model: {model!r}. Use a supported bare model id, or a "
+        f"'provider/model' reference (providers: {', '.join(sorted(_PROVIDER_NAMES))})."
+    )
 
 
 class Router:
@@ -32,22 +73,13 @@ class Router:
     def register(self, provider_name: ProviderName, client: AsyncOpenAI | genai.Client | AsyncAnthropic) -> None:
         self._clients[provider_name] = client
 
-    def _get_provider_for_model(self, model: SupportedModel) -> ProviderName:
-        if model in get_args(SupportedModelOpenAI):
-            return "openai"
-        if model in get_args(SupportedModelGemini):
-            return "gemini"
-        if model in get_args(SupportedModelAnthropic):
-            return "anthropic"
-        raise ValueError(f"Unknown model: {model}")
-
     # Non-streaming overload: `stream` omitted or False narrows the return to RouterResponse.
     @overload
     async def create(
         self,
         *,
         input: list[ChatMessage],
-        model: SupportedModel,
+        model: ModelRef,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -72,7 +104,7 @@ class Router:
         *,
         stream: Literal[True],
         input: list[ChatMessage],
-        model: SupportedModel,
+        model: ModelRef,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -97,7 +129,7 @@ class Router:
         *,
         stream: bool,
         input: list[ChatMessage],
-        model: SupportedModel,
+        model: ModelRef,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -118,7 +150,7 @@ class Router:
         self,
         *,
         input: list[ChatMessage],
-        model: SupportedModel,
+        model: ModelRef,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -139,7 +171,7 @@ class Router:
 
         Args:
             input: List of chat messages.
-            model: The model to use for generation.
+            model: Bare catalog model id, or ``provider/model`` reference.
             include: Optional list of response includables.
             instructions: Optional system instructions.
             max_output_tokens: Optional maximum output tokens.
@@ -212,7 +244,7 @@ class Router:
         self,
         *,
         input: list[ChatMessage],
-        model: SupportedModel,
+        model: ModelRef,
         include: list[ResponseIncludable] | None,
         instructions: str | None,
         max_output_tokens: int | None,
@@ -228,7 +260,7 @@ class Router:
         background: bool | None,
         provider_kwargs: dict[str, Any] | None,
     ) -> RouterResponse:
-        provider = self._get_provider_for_model(model)
+        provider, api_model = resolve_model(model)
         client = self._clients.get(provider)
         if client is None:
             raise ValueError(f"No client registered for provider: {provider}")
@@ -237,7 +269,7 @@ class Router:
             return await OpenAIProvider.create(
                 client=client,
                 input=input,
-                model=cast(SupportedModelOpenAI, model),
+                model=api_model,
                 include=include,
                 instructions=instructions,
                 max_output_tokens=max_output_tokens,
@@ -257,7 +289,7 @@ class Router:
             return await GeminiProvider.create(
                 client=client,
                 input=input,
-                model=cast(SupportedModelGemini, model),
+                model=api_model,
                 include=include,
                 instructions=instructions,
                 max_output_tokens=max_output_tokens,
@@ -272,10 +304,31 @@ class Router:
                 truncation=truncation,
             )
 
+        if provider == "chat_completions":
+            return await ChatCompletionsProvider.create(
+                client=client,
+                input=input,
+                model=api_model,
+                include=include,
+                instructions=instructions,
+                max_output_tokens=max_output_tokens,
+                parallel_tool_calls=parallel_tool_calls,
+                reasoning=reasoning,
+                temperature=temperature,
+                text=text,
+                tool_choice=tool_choice,
+                tools=tools,
+                top_logprobs=top_logprobs,
+                top_p=top_p,
+                truncation=truncation,
+                background=background,
+                provider_kwargs=provider_kwargs,
+            )
+
         return await AnthropicProvider.create(
             client=client,
             input=input,
-            model=cast(SupportedModelAnthropic, model),
+            model=api_model,
             include=include,
             instructions=instructions,
             max_output_tokens=max_output_tokens,
@@ -295,7 +348,7 @@ class Router:
         self,
         *,
         input: list[ChatMessage],
-        model: SupportedModel,
+        model: ModelRef,
         include: list[ResponseIncludable] | None,
         instructions: str | None,
         max_output_tokens: int | None,
@@ -309,7 +362,7 @@ class Router:
         top_p: float | None,
         truncation: Literal["auto", "disabled"] | None,
     ) -> RouterStream:
-        provider = self._get_provider_for_model(model)
+        provider, api_model = resolve_model(model)
         client = self._clients.get(provider)
         if client is None:
             raise ValueError(f"No client registered for provider: {provider}")
@@ -318,7 +371,7 @@ class Router:
             return await OpenAIProvider.create_stream(
                 client=client,
                 input=input,
-                model=cast(SupportedModelOpenAI, model),
+                model=api_model,
                 include=include,
                 instructions=instructions,
                 max_output_tokens=max_output_tokens,
@@ -337,7 +390,26 @@ class Router:
             return await GeminiProvider.create_stream(
                 client=client,
                 input=input,
-                model=cast(SupportedModelGemini, model),
+                model=api_model,
+                include=include,
+                instructions=instructions,
+                max_output_tokens=max_output_tokens,
+                parallel_tool_calls=parallel_tool_calls,
+                reasoning=reasoning,
+                temperature=temperature,
+                text=text,
+                tool_choice=tool_choice,
+                tools=tools,
+                top_logprobs=top_logprobs,
+                top_p=top_p,
+                truncation=truncation,
+            )
+
+        if provider == "chat_completions":
+            return await ChatCompletionsProvider.create_stream(
+                client=client,
+                input=input,
+                model=api_model,
                 include=include,
                 instructions=instructions,
                 max_output_tokens=max_output_tokens,
@@ -355,7 +427,7 @@ class Router:
         return await AnthropicProvider.create_stream(
             client=client,
             input=input,
-            model=cast(SupportedModelAnthropic, model),
+            model=api_model,
             include=include,
             instructions=instructions,
             max_output_tokens=max_output_tokens,
@@ -374,7 +446,7 @@ class Router:
         self,
         *,
         input: list[ChatMessage],
-        model: SupportedModel,
+        model: ModelRef,
         instructions: str | None = None,
         reasoning: Reasoning | None = None,
         tools: Iterable[ToolParam] | None = None,
@@ -385,7 +457,7 @@ class Router:
 
         Args:
             input: List of chat messages.
-            model: The model to use for token counting.
+            model: Bare catalog model id, or ``provider/model`` reference.
             instructions: Optional system instructions.
             reasoning: Optional reasoning configuration.
             tools: Optional list of tools.
@@ -397,43 +469,46 @@ class Router:
             ValueError: If no client is registered for the required provider or if the
                 provider does not support token counting.
         """
-        if model in get_args(SupportedModelOpenAI):
-            client = self._clients.get("openai")
-            if client is None:
-                raise ValueError("No client registered for provider: openai")
+        provider, api_model = resolve_model(model)
+        client = self._clients.get(provider)
+        if client is None:
+            raise ValueError(f"No client registered for provider: {provider}")
+
+        if provider == "openai":
             return await OpenAIProvider.count_tokens(
                 client=client,
                 input=input,
-                model=cast(SupportedModelOpenAI, model),
+                model=api_model,
                 instructions=instructions,
                 reasoning=reasoning,
                 tools=tools,
             )
 
-        if model in get_args(SupportedModelGemini):
-            client = self._clients.get("gemini")
-            if client is None:
-                raise ValueError("No client registered for provider: gemini")
+        if provider == "gemini":
             return await GeminiProvider.count_tokens(
                 client=client,
                 input=input,
-                model=cast(SupportedModelGemini, model),
+                model=api_model,
                 instructions=instructions,
                 reasoning=reasoning,
                 tools=tools,
             )
 
-        if model in get_args(SupportedModelAnthropic):
-            client = self._clients.get("anthropic")
-            if client is None:
-                raise ValueError("No client registered for provider: anthropic")
-            return await AnthropicProvider.count_tokens(
+        if provider == "chat_completions":
+            return await ChatCompletionsProvider.count_tokens(
                 client=client,
                 input=input,
-                model=cast(SupportedModelAnthropic, model),
+                model=api_model,
                 instructions=instructions,
                 reasoning=reasoning,
                 tools=tools,
             )
 
-        raise ValueError(f"Unknown model: {model}")
+        return await AnthropicProvider.count_tokens(
+            client=client,
+            input=input,
+            model=api_model,
+            instructions=instructions,
+            reasoning=reasoning,
+            tools=tools,
+        )

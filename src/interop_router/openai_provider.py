@@ -26,14 +26,7 @@ from openai.types.responses.response_input_item_param import FunctionCallOutput
 from openai.types.responses.tool_param import ToolParam
 from openai.types.shared_params.reasoning import Reasoning
 
-from interop_router.types import (
-    ChatMessage,
-    ContextLimitExceededError,
-    ProviderName,
-    RouterResponse,
-    RouterStream,
-    SupportedModelOpenAI,
-)
+from interop_router.types import ChatMessage, ContextLimitExceededError, ProviderName, RouterResponse, RouterStream
 
 
 class OpenAIProvider:
@@ -44,7 +37,7 @@ class OpenAIProvider:
         *,
         client: AsyncOpenAI,
         input: list[ChatMessage],
-        model: SupportedModelOpenAI,
+        model: str,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -133,7 +126,7 @@ class OpenAIProvider:
         *,
         client: AsyncOpenAI,
         input: list[ChatMessage],
-        model: SupportedModelOpenAI,
+        model: str,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -211,7 +204,7 @@ class OpenAIProvider:
         *,
         client: AsyncOpenAI,
         input: list[ChatMessage],
-        model: SupportedModelOpenAI,
+        model: str,
         instructions: str | None = None,
         reasoning: Reasoning | None = None,
         tools: Iterable[ToolParam] | None = None,

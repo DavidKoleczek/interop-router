@@ -78,14 +78,7 @@ from openai.types.responses.response_text_delta_event import ResponseTextDeltaEv
 from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 from openai.types.shared_params.reasoning import Reasoning
 
-from interop_router.types import (
-    ChatMessage,
-    ContextLimitExceededError,
-    ProviderName,
-    RouterResponse,
-    RouterStream,
-    SupportedModelAnthropic,
-)
+from interop_router.types import ChatMessage, ContextLimitExceededError, ProviderName, RouterResponse, RouterStream
 
 
 class AnthropicProvider:
@@ -97,7 +90,7 @@ class AnthropicProvider:
         *,
         client: AsyncAnthropic,
         input: list[ChatMessage],
-        model: SupportedModelAnthropic,
+        model: str,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -143,7 +136,7 @@ class AnthropicProvider:
         *,
         client: AsyncAnthropic,
         input: list[ChatMessage],
-        model: SupportedModelAnthropic,
+        model: str,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -211,7 +204,7 @@ class AnthropicProvider:
         *,
         client: AsyncAnthropic,
         input: list[ChatMessage],
-        model: SupportedModelAnthropic,
+        model: str,
         instructions: str | None = None,
         reasoning: Reasoning | None = None,
         tools: Iterable[ToolParam] | None = None,
@@ -235,8 +228,8 @@ class AnthropicProvider:
         return result.input_tokens
 
     @staticmethod
-    def _preprocess_input(input: list[ChatMessage], model: SupportedModelAnthropic) -> tuple[list[ChatMessage], str]:
-        mid_conv_system_messages_models: list[SupportedModelAnthropic] = ["claude-opus-4-8", "claude-opus-5"]
+    def _preprocess_input(input: list[ChatMessage], model: str) -> tuple[list[ChatMessage], str]:
+        mid_conv_system_messages_models: list[str] = ["claude-opus-4-8", "claude-opus-5"]
 
         # Leading system messages must remain in the system field not in a system message.
         leading_system_message_count = 0
@@ -438,7 +431,7 @@ class AnthropicProvider:
 
     @staticmethod
     def _create_config(
-        model: SupportedModelAnthropic,
+        model: str,
         max_output_tokens: int | None = None,
         temperature: float | None = None,
         reasoning: Reasoning | None = None,

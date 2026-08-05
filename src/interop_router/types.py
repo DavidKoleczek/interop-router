@@ -18,7 +18,7 @@ from openai.types.responses import (
 from openai.types.responses.response import IncompleteDetails
 from openai.types.shared_params.reasoning import Reasoning
 
-ProviderName: TypeAlias = Literal["openai", "gemini", "anthropic"]
+ProviderName: TypeAlias = Literal["openai", "gemini", "anthropic", "chat_completions"]
 CreatedBy: TypeAlias = Literal["user"] | ProviderName
 
 SupportedModelOpenAI: TypeAlias = Literal[
@@ -90,6 +90,7 @@ SupportedModelAnthropic: TypeAlias = Literal[
 ]
 
 SupportedModel: TypeAlias = SupportedModelOpenAI | SupportedModelGemini | SupportedModelAnthropic
+ModelRef: TypeAlias = SupportedModel | str
 
 
 @dataclass
@@ -206,7 +207,7 @@ class ResponsesAPIProtocol(Protocol):
         *,
         client: Any,
         input: list[ChatMessage],
-        model: SupportedModel,
+        model: str,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -232,7 +233,7 @@ class ResponsesAPIProtocol(Protocol):
         stream: Literal[True],
         client: Any,
         input: list[ChatMessage],
-        model: SupportedModel,
+        model: str,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -258,7 +259,7 @@ class ResponsesAPIProtocol(Protocol):
         stream: bool,
         client: Any,
         input: list[ChatMessage],
-        model: SupportedModel,
+        model: str,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -281,7 +282,7 @@ class ResponsesAPIProtocol(Protocol):
         *,
         client: Any,
         input: list[ChatMessage],
-        model: SupportedModel,
+        model: str,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -304,7 +305,7 @@ class ResponsesAPIProtocol(Protocol):
         *,
         client: Any,
         input: list[ChatMessage],
-        model: SupportedModel,
+        model: str,
         instructions: str | None = None,
         reasoning: Reasoning | None = None,
         tools: Iterable[ToolParam] | None = None,

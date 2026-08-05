@@ -30,13 +30,7 @@ from openai.types.responses.response_text_delta_event import ResponseTextDeltaEv
 from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 from openai.types.shared_params.reasoning import Reasoning
 
-from interop_router.types import (
-    ChatMessage,
-    ContextLimitExceededError,
-    RouterResponse,
-    RouterStream,
-    SupportedModelGemini,
-)
+from interop_router.types import ChatMessage, ContextLimitExceededError, RouterResponse, RouterStream
 
 
 class GeminiProvider:
@@ -49,7 +43,7 @@ class GeminiProvider:
         *,
         client: genai.Client,
         input: list[ChatMessage],
-        model: SupportedModelGemini,
+        model: str,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -104,7 +98,7 @@ class GeminiProvider:
         *,
         client: genai.Client,
         input: list[ChatMessage],
-        model: SupportedModelGemini,
+        model: str,
         include: list[ResponseIncludable] | None = None,
         instructions: str | None = None,
         max_output_tokens: int | None = None,
@@ -204,7 +198,7 @@ class GeminiProvider:
         *,
         client: genai.Client,
         input: list[ChatMessage],
-        model: SupportedModelGemini,
+        model: str,
         instructions: str | None = None,
         reasoning: Reasoning | None = None,
         tools: Iterable[ToolParam] | None = None,
@@ -216,7 +210,7 @@ class GeminiProvider:
         # or tools in the config (only Vertex AI does). To get an accurate count, we prepend
         # system instructions as a Content entry in the contents list.
         combined_instructions = "\n".join(filter(None, [system_instruction, instructions]))
-        count_contents: list[Content] = []
+        count_contents: list[types.ContentUnion] = []
         if combined_instructions:
             count_contents.append(Content(parts=[types.Part(text=combined_instructions)], role="user"))
         count_contents.extend(gemini_messages)
@@ -254,8 +248,8 @@ class GeminiProvider:
     # region: Input conversion
 
     @staticmethod
-    def _convert_input_messages(input: list[ChatMessage]) -> list[Content]:
-        gemini_content: list[Content] = []
+    def _convert_input_messages(input: list[ChatMessage]) -> list[types.ContentUnion]:
+        gemini_content: list[types.ContentUnion] = []
         previous_was_function_call = False
         # ids to skip because they were processed already (for image_generation function calls)
         skip_messages: set[str] = set()
@@ -492,7 +486,7 @@ class GeminiProvider:
 
     @staticmethod
     def _create_config(
-        model: SupportedModelGemini,
+        model: str,
         system_instruction: str,
         include: list[ResponseIncludable] | None = None,
         max_output_tokens: int | None = None,
