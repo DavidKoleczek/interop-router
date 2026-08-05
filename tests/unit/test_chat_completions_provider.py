@@ -26,6 +26,7 @@ from openai.types.responses import (
     EasyInputMessageParam,
     FunctionToolParam,
     ResponseFunctionToolCallParam,
+    ResponseInputImageContentParam,
     ResponseInputImageParam,
     ResponseInputTextParam,
     ResponseOutputMessageParam,
@@ -513,6 +514,75 @@ def test_convert_assistant_preamble_then_parallel_tools() -> None:
 
 # endregion
 
+# region: Image in function call output
+
+READ_IMAGE_CALL_ID = "call_read_image_1"
+READ_IMAGE_ARGS = '{"path": "/tmp/landscape.png"}'
+TOOL_RESULT_IMAGE_URL = "data:image/png;base64,SHORT_TEST_IMAGE"
+
+INPUT_MESSAGES_IMAGE_TOOL_RESULT: list[ResponseInputItemParam] = [
+    EasyInputMessageParam(
+        role="user",
+        content="Use the read_image tool to read '/tmp/landscape.png'.",
+    ),
+    ResponseFunctionToolCallParam(
+        type="function_call",
+        call_id=READ_IMAGE_CALL_ID,
+        name="read_image",
+        arguments=READ_IMAGE_ARGS,
+    ),
+    FunctionCallOutput(
+        type="function_call_output",
+        call_id=READ_IMAGE_CALL_ID,
+        output=cast(
+            list[Any],
+            [ResponseInputImageContentParam(type="input_image", image_url=TOOL_RESULT_IMAGE_URL, detail="auto")],
+        ),
+    ),
+]
+
+
+def test_convert_image_in_function_call_output() -> None:
+    """Images in function_call_output map to a follow-up user message (tool messages are text-only)."""
+    input_messages = [ChatMessage(message=item) for item in INPUT_MESSAGES_IMAGE_TOOL_RESULT]
+
+    expected: list[ChatCompletionMessageParam] = [
+        ChatCompletionUserMessageParam(
+            role="user",
+            content="Use the read_image tool to read '/tmp/landscape.png'.",
+        ),
+        ChatCompletionAssistantMessageParam(
+            role="assistant",
+            content=None,
+            tool_calls=[
+                ChatCompletionMessageFunctionToolCallParam(
+                    id=READ_IMAGE_CALL_ID,
+                    type="function",
+                    function={"name": "read_image", "arguments": READ_IMAGE_ARGS},
+                ),
+            ],
+        ),
+        ChatCompletionToolMessageParam(
+            role="tool",
+            tool_call_id=READ_IMAGE_CALL_ID,
+            content="",
+        ),
+        ChatCompletionUserMessageParam(
+            role="user",
+            content=[
+                ChatCompletionContentPartImageParam(
+                    type="image_url",
+                    image_url={"url": TOOL_RESULT_IMAGE_URL, "detail": "auto"},
+                ),
+            ],
+        ),
+    ]
+
+    assert ChatCompletionsProvider._convert_input_messages(input_messages) == expected
+
+
+# endregion
+
 # region: Instructions
 
 
@@ -939,6 +1009,85 @@ async def test_count_tokens_real_landscape_image() -> None:
     assert text_count
     assert high_count
     assert low_count
+
+
+async def test_count_tokens_image_in_function_call_output() -> None:
+    """Images in function_call_output are included in the local token count via user-message mapping."""
+    image_path = Path(__file__).parents[1] / "integration" / "data" / "landscape.png"
+    data_url = f"data:image/png;base64,{base64.b64encode(image_path.read_bytes()).decode('utf-8')}"
+
+    read_image_tool = FunctionToolParam(
+        type="function",
+        name="read_image",
+        description="Read an image file and return its contents.",
+        parameters={
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "Path to the image file."}},
+            "required": ["path"],
+            "additionalProperties": False,
+        },
+        strict=True,
+    )
+
+    base_messages = [
+        ChatMessage(message=EasyInputMessageParam(role="system", content="Describe images briefly.")),
+        ChatMessage(
+            message=EasyInputMessageParam(
+                role="user",
+                content="Use the read_image tool to read '/tmp/landscape.png'.",
+            )
+        ),
+        ChatMessage(
+            message=ResponseFunctionToolCallParam(
+                type="function_call",
+                call_id=READ_IMAGE_CALL_ID,
+                name="read_image",
+                arguments=READ_IMAGE_ARGS,
+            )
+        ),
+    ]
+    without_image = [
+        *base_messages,
+        ChatMessage(
+            message=FunctionCallOutput(
+                type="function_call_output",
+                call_id=READ_IMAGE_CALL_ID,
+                output="",
+            )
+        ),
+    ]
+    with_image = [
+        *base_messages,
+        ChatMessage(
+            message=FunctionCallOutput(
+                type="function_call_output",
+                call_id=READ_IMAGE_CALL_ID,
+                output=cast(
+                    list[Any],
+                    [ResponseInputImageContentParam(type="input_image", image_url=data_url, detail="auto")],
+                ),
+            )
+        ),
+    ]
+
+    without_count = await ChatCompletionsProvider.count_tokens(
+        client=cast(Any, None),
+        input=without_image,
+        model="o200k_base",
+        tools=[read_image_tool],
+    )
+    with_count = await ChatCompletionsProvider.count_tokens(
+        client=cast(Any, None),
+        input=with_image,
+        model="o200k_base",
+        tools=[read_image_tool],
+    )
+
+    # High-detail tile cost for landscape.png (1536x1024) is 1105.
+    assert with_count - without_count >= 1105, (
+        f"Expected image in tool result to add at least 1105 tokens, "
+        f"got delta {with_count - without_count} (with={with_count}, without={without_count})"
+    )
 
 
 # endregion

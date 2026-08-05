@@ -1,6 +1,6 @@
 [project]
 name = "interop-router"
-version = "0.4.0"
+version = "0.4.1"
 description = "Interoperate between AI providers using the OpenAI Responses API as a common interface."
 readme = "README.md"
 authors = [

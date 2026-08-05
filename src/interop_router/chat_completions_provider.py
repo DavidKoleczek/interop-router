@@ -300,8 +300,9 @@ class ChatCompletionsProvider:
 
         - type=function_call_output -> ChatCompletionToolMessageParam {role="tool", tool_call_id=call_id, content=...}
           - output=str -> content=<same>
-          - output=list -> convert input_text parts to text; skip images/files (tool message content is text-only in Chat Completions)
-          Later consider mapping tool results with images to user messages automatically.
+          - output=list -> convert input_text parts to text on the tool message (text-only in Chat Completions);
+            map input_image parts to a follow-up user message with image_url parts (coerce original to auto);
+            skip input_file
 
         - type=reasoning should be dropped (for now assume chat completions models don't persist reasoning across turns)
         """
@@ -451,12 +452,27 @@ class ChatCompletionsProvider:
                     )
                 elif isinstance(output, list):
                     output_parts: list[ChatCompletionContentPartTextParam] = []
+                    image_parts: list[ChatCompletionContentPartImageParam] = []
                     for output_item in output:
                         if output_item.get("type") == "input_text":
                             output_parts.append(
                                 ChatCompletionContentPartTextParam(
                                     type="text",
                                     text=output_item.get("text", ""),
+                                )
+                            )
+                        elif output_item.get("type") == "input_image":
+                            image_url = output_item.get("image_url")
+                            if not image_url:
+                                continue
+                            raw_detail = output_item.get("detail", "auto")
+                            detail: Literal["auto", "low", "high"] = (
+                                raw_detail if raw_detail in ("auto", "low", "high") else "auto"
+                            )
+                            image_parts.append(
+                                ChatCompletionContentPartImageParam(
+                                    type="image_url",
+                                    image_url={"url": image_url, "detail": detail},
                                 )
                             )
                     chat_completion_messages.append(
@@ -466,6 +482,10 @@ class ChatCompletionsProvider:
                             content=output_parts if output_parts else "",
                         )
                     )
+                    if image_parts:
+                        chat_completion_messages.append(
+                            ChatCompletionUserMessageParam(role="user", content=image_parts)
+                        )
 
         if instructions:
             for message in chat_completion_messages:

@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any, cast
 
 from openai import AsyncOpenAI
-from openai.types.responses import EasyInputMessageParam, ResponseInputImageParam, ResponseInputTextParam
+from openai.types.responses import (
+    EasyInputMessageParam,
+    ResponseInputImageContentParam,
+    ResponseInputImageParam,
+    ResponseInputTextParam,
+)
 from openai.types.responses.function_tool_param import FunctionToolParam
 from openai.types.responses.response_input_item_param import FunctionCallOutput, Message
 import pytest
@@ -19,6 +24,24 @@ from interop_router.router import Router
 from interop_router.types import ChatMessage, ContextLimitExceededError, RouterResponse
 
 OPENAI_CHAT_COMPLETIONS_MODEL = "chat_completions/gpt-5.6-luna"
+
+READ_IMAGE_TOOL = FunctionToolParam(
+    type="function",
+    name="read_image",
+    description="Read an image file and return its contents.",
+    parameters=cast(
+        dict[str, object],
+        {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Path to the image file."},
+            },
+            "required": ["path"],
+            "additionalProperties": False,
+        },
+    ),
+    strict=True,
+)
 
 FUNCTION_TOOLS: list[FunctionToolParam] = [
     FunctionToolParam(
@@ -264,6 +287,63 @@ async def test_local_image_understanding(router: Router) -> None:
         reasoning={"effort": "medium"},
     )
     assert response is not None
+
+
+async def test_local_image_in_tool_result(router: Router) -> None:
+    """Verify images returned in function call outputs are handled."""
+    base_url, model = _require_local_env()
+    router.register("chat_completions", _local_client(base_url))
+
+    messages = [
+        ChatMessage(
+            message=EasyInputMessageParam(
+                role="user",
+                content="Use the read_image tool to read the image at '/tmp/landscape.png', then describe what you see.",
+            )
+        ),
+    ]
+
+    response = await router.create(
+        model=f"chat_completions/{model}",
+        input=messages,
+        tools=[READ_IMAGE_TOOL],
+        tool_choice="required",
+        reasoning={"effort": "medium"},
+    )
+    assert response is not None
+    assert any(
+        msg.message.get("type") == "function_call" and msg.message.get("name") == "read_image"
+        for msg in response.output
+    )
+
+    messages.extend(response.output)
+    image_path = Path(__file__).parents[0] / "data" / "landscape.png"
+    data_url = f"data:image/png;base64,{base64.b64encode(image_path.read_bytes()).decode('utf-8')}"
+
+    for chat_message in response.output:
+        msg = chat_message.message
+        if msg.get("type") == "function_call" and msg.get("name") == "read_image":
+            messages.append(
+                ChatMessage(
+                    message=FunctionCallOutput(
+                        call_id=cast(str, msg.get("call_id", "")),
+                        output=cast(
+                            list[Any],
+                            [ResponseInputImageContentParam(type="input_image", image_url=data_url, detail="auto")],
+                        ),
+                        type="function_call_output",
+                    )
+                )
+            )
+
+    response2 = await router.create(
+        model=f"chat_completions/{model}",
+        input=messages,
+        tools=[READ_IMAGE_TOOL],
+        tool_choice="auto",
+        reasoning={"effort": "medium"},
+    )
+    assert response2 is not None
 
 
 async def test_local_context_limit_exceeded(router: Router) -> None:
