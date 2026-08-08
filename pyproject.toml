@@ -1,6 +1,6 @@
 [project]
 name = "interop-router"
-version = "0.4.1"
+version = "0.5.0"
 description = "Interoperate between AI providers using the OpenAI Responses API as a common interface."
 readme = "README.md"
 authors = [
@@ -8,12 +8,12 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "anthropic[aiohttp]>=0.120.2,<1.0",
+    "anthropic[aiohttp]>=0.121.0,<1.0",
     "google-genai[aiohttp]>=2.16,<3.0",
-    "openai[aiohttp]>=2.52,<3.0",
-    "pillow>=12,<13",
+    "openai[aiohttp]>=2.53,<3.0",
+    "pillow>=12.3,<13",
     "pydantic>=2.13.4,<3.0",
-    "tiktoken>=0.9,<1.0",
+    "tiktoken>=0.13,<1.0",
 ]
 
 [build-system]
@@ -26,8 +26,9 @@ dev = [
     "nbclient>=0.11.0",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4",
+    "python-dotenv>=1.2.2",
     "ruff>=0.16.1",
-    "ty>=0.0.65",
+    "ty>=0.0.66",
 ]
 
 [tool.uv]

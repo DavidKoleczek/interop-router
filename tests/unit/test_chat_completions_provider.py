@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from openai.types.chat import (
+    ChatCompletion,
     ChatCompletionAssistantMessageParam,
     ChatCompletionContentPartImageParam,
     ChatCompletionContentPartTextParam,
@@ -1088,6 +1089,40 @@ async def test_count_tokens_image_in_function_call_output() -> None:
         f"Expected image in tool result to add at least 1105 tokens, "
         f"got delta {with_count - without_count} (with={with_count}, without={without_count})"
     )
+
+
+# endregion
+
+# region: Provider errors
+
+
+def test_convert_response_error_only() -> None:
+    """
+    # Some gateways report 200 bodies with an error object and no choices; the SDK parses these with construct(), keeping error as a model extra.
+    # Streamed failures are unaffected: the SDK's SSE iterator raises APIError on error events itself.
+    """
+    completion = ChatCompletion.construct(error={"message": "Upstream error", "code": 502})
+
+    response = ChatCompletionsProvider._convert_response(completion)
+
+    assert response.output == []
+    assert response.error is not None
+    assert response.error.code == "server_error"
+    assert response.error.message == "[502] Upstream error"
+
+    rate_limited = ChatCompletion.construct(error={"message": "rate limited", "code": 429})
+    response = ChatCompletionsProvider._convert_response(rate_limited)
+    assert response.error is not None
+    assert response.error.code == "rate_limit_exceeded"
+
+
+def test_convert_response_empty_choices_without_error_stays_none() -> None:
+    completion = ChatCompletion.construct(choices=None)
+
+    response = ChatCompletionsProvider._convert_response(completion)
+
+    assert response.output == []
+    assert response.error is None
 
 
 # endregion

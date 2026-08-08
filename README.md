@@ -48,11 +48,22 @@ router.register("chat_completions", AsyncOpenAI(base_url="http://localhost:8000/
 # See https://platform.openai.com/docs/guides/migrate-to-responses and the library source for more details on typing.
 messages = [ChatMessage(message=EasyInputMessageParam(role="user", content="Hello!"))]
 
+# OpenAI, Azure OpenAI, Gemini, and Anthropic are supported
 response = await router.create(input=messages, model="gpt-5.6-terra")
 response = await router.create(input=messages, model="gemini-3.6-flash")
 response = await router.create(input=messages, model="claude-sonnet-5")
 # Explicit provider routing with provider/model.
 response = await router.create(input=messages, model="chat_completions/nvidia/Qwen3.6-27B-NVFP4")
+```
+
+Register several clients for the same provider by giving each one a name, then route to it with `name/model`:
+
+```python
+router.register("chat_completions", AsyncOpenAI(base_url="http://localhost:8000/v1"), name="vllm")
+router.register("chat_completions", AsyncOpenAI(base_url="https://openrouter.ai/api/v1"), name="openrouter")
+
+response = await router.create(input=messages, model="vllm/nvidia/Qwen3.6-27B-NVFP4")
+response = await router.create(input=messages, model="openrouter/moonshotai/kimi-k2")
 ```
 
 Count input tokens before making a request using each provider's native token counting endpoint:

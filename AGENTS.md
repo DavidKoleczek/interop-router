@@ -18,6 +18,7 @@
 - When using pathlib, **always** Use `.parents[i]` syntax to go up directories instead of using `.parent` multiple times.
 - When writing tests, use pytest and pytest-asyncio.
 - NEVER use `# type: ignore`. It is better to leave the issue and have the user work with you to fix it.
+- NEVER add a bare `*,` keyword-only marker to a function signature. Write plain positional-or-keyword parameters and call them by keyword.
 
 # Dependency Context
 - For libraries that are new or change frequently you must use the source code of libraries or their documentation as your source of truth for how to use them.

@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from typing import Any, Literal, get_args, overload
+from typing import Any, Literal, NamedTuple, get_args, overload
 
 from anthropic import AsyncAnthropic
 from google import genai
@@ -64,14 +64,82 @@ def resolve_model(model: ModelRef) -> tuple[ProviderName, str]:
     )
 
 
+class _Registration(NamedTuple):
+    """A registered client and the provider adapter that handles its requests."""
+
+    provider: ProviderName
+    client: Any
+
+
 class Router:
     """Router that dispatches API calls to the appropriate provider based on model type."""
 
     def __init__(self) -> None:
-        self._clients: dict[ProviderName, Any] = {}
+        self._registrations: dict[str, _Registration] = {}
 
-    def register(self, provider_name: ProviderName, client: AsyncOpenAI | genai.Client | AsyncAnthropic) -> None:
-        self._clients[provider_name] = client
+    def register(
+        self,
+        provider_name: ProviderName,
+        client: AsyncOpenAI | genai.Client | AsyncAnthropic,
+        name: str | None = None,
+    ) -> None:
+        """Register a client for a provider.
+
+        Args:
+            provider_name: Provider whose adapter handles requests for this client.
+            client: Provider SDK client instance.
+            name: Optional registration name, used as the prefix in ``name/model`` references.
+            Defaults to ``provider_name``.
+
+        Raises:
+            ValueError: If ``name`` is empty, contains ``/``, or is the name of a different provider.
+        """
+        registration_name = provider_name if name is None else name
+        if not registration_name:
+            raise ValueError("Registration name must be a non-empty string.")
+        if "/" in registration_name:
+            raise ValueError(f"Registration name must not contain '/': {registration_name!r}")
+        if registration_name in _PROVIDER_NAMES and registration_name != provider_name:
+            raise ValueError(f"Registration name {registration_name!r} is reserved for the provider of the same name.")
+
+        self._registrations[registration_name] = _Registration(provider=provider_name, client=client)
+
+    def _resolve(self, model: ModelRef) -> tuple[ProviderName, str, Any]:
+        """Resolve a model reference to a provider, API model id, and registered client.
+
+        Registration names take precedence over the provider catalogs so that a named client can be addressed directly. Anything else falls back to `resolve_model`.
+        """
+        if "/" in model:
+            prefix, api_model = model.split("/", 1)
+            registration = self._registrations.get(prefix)
+            if registration is not None:
+                if not api_model:
+                    raise ValueError(f"Empty model id in model reference: {model!r}")
+                return registration.provider, api_model, registration.client
+
+        provider, api_model = resolve_model(model)
+        return provider, api_model, self._client_for(provider)
+
+    def _client_for(self, provider: ProviderName) -> Any:
+        """Return the client registered for a provider when it is unambiguous.
+
+        Raises:
+            ValueError: If no client is registered for the provider, or if several are registered under different names.
+        """
+        default = self._registrations.get(provider)
+        if default is not None:
+            return default.client
+
+        matches = {name: entry for name, entry in self._registrations.items() if entry.provider == provider}
+        if not matches:
+            raise ValueError(f"No client registered for provider: {provider}")
+        if len(matches) > 1:
+            names = ", ".join(sorted(matches))
+            raise ValueError(
+                f"Multiple clients are registered for provider {provider!r}: {names}. "
+                f"Use a 'name/model' reference to select one."
+            )
+        return next(iter(matches.values())).client
 
     # Non-streaming overload: `stream` omitted or False narrows the return to RouterResponse.
     @overload
@@ -171,7 +239,7 @@ class Router:
 
         Args:
             input: List of chat messages.
-            model: Bare catalog model id, or ``provider/model`` reference.
+            model: Bare catalog model id, or ``provider/model`` reference. When clients are registered under custom names, ``name/model`` selects one of them.
             include: Optional list of response includables.
             instructions: Optional system instructions.
             max_output_tokens: Optional maximum output tokens.
@@ -197,8 +265,8 @@ class Router:
             A RouterResponse when stream is False or omitted, otherwise a RouterStream.
 
         Raises:
-            ValueError: If no client is registered for the required provider, if the
-                model is unknown, or if stream=True is combined with background=True.
+            ValueError: If the model is unknown, if no client is registered for the required provider,
+            if several clients are registered for it and the reference does not name one, or if stream=True is combined with background=True.
         """
         if stream and background:
             raise ValueError("stream=True is not compatible with background=True")
@@ -260,10 +328,7 @@ class Router:
         background: bool | None,
         provider_kwargs: dict[str, Any] | None,
     ) -> RouterResponse:
-        provider, api_model = resolve_model(model)
-        client = self._clients.get(provider)
-        if client is None:
-            raise ValueError(f"No client registered for provider: {provider}")
+        provider, api_model, client = self._resolve(model)
 
         if provider == "openai":
             return await OpenAIProvider.create(
@@ -362,10 +427,7 @@ class Router:
         top_p: float | None,
         truncation: Literal["auto", "disabled"] | None,
     ) -> RouterStream:
-        provider, api_model = resolve_model(model)
-        client = self._clients.get(provider)
-        if client is None:
-            raise ValueError(f"No client registered for provider: {provider}")
+        provider, api_model, client = self._resolve(model)
 
         if provider == "openai":
             return await OpenAIProvider.create_stream(
@@ -457,7 +519,7 @@ class Router:
 
         Args:
             input: List of chat messages.
-            model: Bare catalog model id, or ``provider/model`` reference.
+            model: Bare catalog model id, or ``provider/model`` reference. When clients are registered under custom names, ``name/model`` selects one of them.
             instructions: Optional system instructions.
             reasoning: Optional reasoning configuration.
             tools: Optional list of tools.
@@ -466,13 +528,10 @@ class Router:
             Token count estimate for the input.
 
         Raises:
-            ValueError: If no client is registered for the required provider or if the
-                provider does not support token counting.
+            ValueError: If the model is unknown, if no client is registered for the required provider,
+            or if several clients are registered for it and the reference does not name one.
         """
-        provider, api_model = resolve_model(model)
-        client = self._clients.get(provider)
-        if client is None:
-            raise ValueError(f"No client registered for provider: {provider}")
+        provider, api_model, client = self._resolve(model)
 
         if provider == "openai":
             return await OpenAIProvider.count_tokens(

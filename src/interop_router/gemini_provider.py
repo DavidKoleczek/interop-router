@@ -443,7 +443,8 @@ class GeminiProvider:
         for message in input:
             input_message = message.message
             if input_message.get("type") == "function_call" and input_message.get("call_id") == call_id:
-                return input_message.get("name", "")
+                name = input_message.get("name")
+                return name if isinstance(name, str) else ""
         return ""
 
     @staticmethod

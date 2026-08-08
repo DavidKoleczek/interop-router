@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator, Iterable
+import json
 import time
 from typing import Any, ClassVar, Literal, cast
 import uuid
@@ -26,6 +27,7 @@ from openai.types.chat.chat_completion_named_tool_choice_param import ChatComple
 from openai.types.chat.chat_completion_tool_choice_option_param import ChatCompletionToolChoiceOptionParam
 from openai.types.completion_usage import CompletionUsage
 from openai.types.responses import (
+    ResponseError,
     ResponseFunctionToolCallParam,
     ResponseIncludable,
     ResponseOutputTextParam,
@@ -644,14 +646,40 @@ class ChatCompletionsProvider:
         return chat_tools
 
     @staticmethod
+    def _convert_error(raw: object) -> ResponseError | None:
+        """Converts an error payload from a 200-with-error body to a ResponseError.
+
+        ResponseError's code is a closed literal, so raw HTTP-style codes map onto it (429 becomes rate_limit_exceeded, everything else server_error)
+        and are folded into the message along with any metadata so no information is lost.
+        """
+        if not raw:
+            return None
+        if not isinstance(raw, dict):
+            return ResponseError(code="server_error", message=str(raw))
+        raw_code = raw.get("code")
+        raw_message = raw.get("message")
+        message = raw_message if isinstance(raw_message, str) and raw_message else "Unknown provider error"
+        if raw_code is not None:
+            message = f"[{raw_code}] {message}"
+        metadata = raw.get("metadata")
+        if isinstance(metadata, dict) and metadata:
+            message = f"{message} (metadata: {json.dumps(metadata, default=str)})"
+        code: Literal["server_error", "rate_limit_exceeded"] = (
+            "rate_limit_exceeded" if str(raw_code) == "429" else "server_error"
+        )
+        return ResponseError(code=code, message=message)
+
+    @staticmethod
     def _convert_response(completion: ChatCompletion) -> RouterResponse:
         output: list[ChatMessage] = []
         incomplete_details: IncompleteDetails | None = None
         item_status: Literal["completed", "incomplete"] = "completed"
 
+        error = ChatCompletionsProvider._convert_error(getattr(completion, "error", None))
+
         if not completion.choices:
             usage = ChatCompletionsProvider._convert_usage(completion.usage) if completion.usage else None
-            return RouterResponse(output=output, usage=usage)
+            return RouterResponse(output=output, error=error, usage=usage)
 
         # We don't have an n parameter, so we always take the first choice.
         choice = completion.choices[0]
@@ -731,6 +759,7 @@ class ChatCompletionsProvider:
             output[-1].original_response = completion.model_dump(mode="json")
         return RouterResponse(
             output=output,
+            error=error,
             incomplete_details=incomplete_details,
             usage=usage,
         )
